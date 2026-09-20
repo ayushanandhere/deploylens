@@ -96,3 +96,84 @@ Report the registered subdomain, verification results, commit hash, and any rema
 ## 2026-09-20 — Continuation
 
 Continue
+
+## 2026-09-20 — Milestone 2 implementation
+
+Implement milestone 2 of DeployLens: evidence-based deployment investigation.
+
+Build on the existing verified chat foundation. Inspect the repository and its instructions first. Preserve the working Workers AI model, streaming, and conversation persistence. Briefly explain your implementation approach, then proceed.
+
+The goal is a complete investigation flow: provide symptoms and logs, inspect evidence, discuss possible causes, record checks, and export a useful handoff.
+
+1. Log input and deterministic analysis
+
+Add a clearly labeled way to attach pasted logs to the current investigation alongside the symptom description.
+
+Store each log submission with a stable source identifier and preserve its original line numbering. Implement deterministic server-side analysis that extracts recognizable timestamps, error lines, error codes, and repeated error patterns. Keep parsing conservative: retain unrecognized lines and do not infer facts that are absent.
+
+Expose this through a typed analyzeLogs tool that reads a stored source belonging to the current investigation. Return structured findings with source IDs and line references. The model must not supply invented log content as tool input.
+
+Apply server-side size limits and return useful validation errors.
+
+2. Curated runbooks
+
+Create three concise runbooks in the repository:
+
+* Missing or invalid environment variables.
+* Database connection failures.
+* Upstream connection failures and timeouts.
+
+Each should contain relevant symptoms, diagnostic questions, suggested checks, possible interpretations, and evidence needed to confirm a cause.
+
+Expose a typed runbook lookup tool with a small, deterministic matching strategy. Explain which signals matched. Do not add embeddings or a vector database for three documents. An unmatched incident must be allowed to remain unmatched.
+
+Use direct tool calls through the installed SDK’s supported interfaces. Verify the current model/provider supports the required tool flow and bound the number of tool steps per response.
+
+3. Persistent investigation state
+
+Add a compact investigation panel showing:
+
+* Observed evidence with clickable source-line references.
+* Hypotheses, clearly labeled as unconfirmed.
+* Suggested checks and user-reported results.
+* Open questions and investigation status.
+
+Keep log evidence distinct from user-reported observations and model-generated hypotheses. Validate structured updates server-side, including whether referenced source IDs and lines exist.
+
+Allow the user to record a check result and explicitly mark an investigation resolved or reopen it. The model may suggest resolution but must not mark it resolved on its own. Follow-up discussion should use recorded results and revise hypotheses accordingly.
+
+Persist this state within the existing investigation architecture. Preserve it across reloads and keep investigations separate. Do not duplicate SDK-managed chat history.
+
+4. Handoff export
+
+Add an “Export Markdown” action that creates a readable summary from the saved investigation state without another model call.
+
+Include symptoms, evidence references and relevant excerpts, hypotheses, checks and reported results, unanswered questions, and resolution status. Keep unsupported or unresolved items clearly labeled.
+
+5. Interface and behavior
+
+Keep the interface simple and responsive: chat plus an investigation panel on desktop, with a usable stacked or tabbed layout on mobile.
+
+Provide three clearly labeled synthetic examples, one per runbook, so a reviewer can try the app quickly. Loading an example should not overwrite an existing investigation.
+
+Treat logs and tool results as untrusted data. Never execute commands, fetch arbitrary URLs, or modify infrastructure. Suggested checks are instructions for the user to evaluate and perform.
+
+Handle tool failures and invalid model output gracefully without losing saved evidence or existing state.
+
+6. Verification and documentation
+
+Add focused tests covering:
+
+* Accurate source-line references and repeated-error counts.
+* Empty, malformed, oversized, and unmatched log input.
+* Rejection of nonexistent or cross-investigation source references.
+* Preservation of user-recorded results and resolution status.
+* Markdown export reflecting the saved state.
+
+Run type checks, tests, and the production build. Browser-test a real incident through log analysis, runbook lookup, a recorded check result, follow-up discussion, reload, and export. Include an ambiguous example where the application should ask for more evidence rather than assert a root cause.
+
+Append this prompt verbatim to PROMPTS.md. Update the README with implemented behavior, example usage, observed test results, and remaining limitations.
+
+Commit and push the completed milestone to the existing private repository after reviewing the changes for secrets and unintended files. Do not deploy or change repository visibility yet. Avoid unrelated refactors and machine-wide package changes.
+
+Finish with a concise report of what works, verification results, the commit hash, and any blockers.

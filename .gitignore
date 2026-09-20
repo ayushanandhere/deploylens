@@ -1,0 +1,26 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Cloudflare local runtime state
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Test and tool output
+coverage/
+*.log
+npm-debug.log*
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/

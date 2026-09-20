@@ -85,6 +85,11 @@ function InvestigationWorkspace({
     onClose: useCallback(() => setConnected(false), []),
     onError: useCallback((_error: Event) => {
       setLocalError(getErrorMessage(new Error("WebSocket connection failed")));
+    }, []),
+    onStateUpdateError: useCallback(() => {
+      setLocalError(
+        "Direct client state updates are disabled. Use the validated controls in the investigation panel."
+      );
     }, [])
   });
 
@@ -555,6 +560,11 @@ export default function App() {
           <button className="new-button" onClick={() => beginNewInvestigation()}><span aria-hidden="true">＋</span> New investigation</button>
         </div>
       </header>
+      <div className="demo-boundary" role="note">
+        <strong>Public demo:</strong> anyone with an investigation URL can access
+        its contents. Use only synthetic or redacted logs; never submit secrets or
+        sensitive production data.
+      </div>
       <InvestigationWorkspace
         key={investigationId}
         investigationId={investigationId}

@@ -60,6 +60,18 @@ button:disabled {
   z-index: 10;
 }
 
+.demo-boundary {
+  width: min(1440px, calc(100% - 48px));
+  margin: 14px auto 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(180, 83, 9, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 247, 237, 0.9);
+  color: #7c2d12;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .example-actions {
   display: flex;
   align-items: center;
@@ -800,6 +812,11 @@ button:disabled {
 }
 
 @media (max-width: 660px) {
+  .demo-boundary {
+    width: calc(100% - 24px);
+    margin-top: 10px;
+  }
+
   .topbar {
     height: auto;
     padding: 14px 16px;

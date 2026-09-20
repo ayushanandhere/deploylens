@@ -82,6 +82,8 @@ export type ModelInvestigationUpdate = {
 };
 
 const MAX_ITEM_LENGTH = 1_000;
+export const MAX_USER_OBSERVATIONS = 50;
+export const MAX_INVESTIGATION_CHECKS = 30;
 
 function cleanText(value: string, label: string, max = MAX_ITEM_LENGTH): string {
   const text = value.trim();
@@ -187,6 +189,7 @@ export function applyModelInvestigationUpdate(
 
   const checks = [...state.checks];
   for (const suggestion of (update.suggestedChecks ?? []).slice(0, 12)) {
+    if (checks.length >= MAX_INVESTIGATION_CHECKS) break;
     const description = cleanText(suggestion, "Suggested check");
     const duplicate = checks.some(
       (item) => item.description.toLowerCase() === description.toLowerCase()

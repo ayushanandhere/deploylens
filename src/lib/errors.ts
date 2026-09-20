@@ -28,5 +28,9 @@ export function getErrorMessage(error: unknown): string {
     return "The connection to this investigation was interrupted. Check the development server and try again.";
   }
 
+  if (normalized.includes("rate limit") || normalized.includes("too many requests")) {
+    return "This investigation reached a temporary rate limit. Wait for the stated retry window, then try again.";
+  }
+
   return "DeployLens could not complete this response. Your investigation history is still saved; please try again.";
 }

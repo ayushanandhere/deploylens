@@ -22,4 +22,10 @@ describe("getErrorMessage", () => {
       "could not complete"
     );
   });
+
+  it("surfaces a useful temporary rate-limit message", () => {
+    expect(getErrorMessage(new Error("Rate limit reached"))).toContain(
+      "temporary rate limit"
+    );
+  });
 });

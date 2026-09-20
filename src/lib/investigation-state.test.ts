@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyModelInvestigationUpdate,
   createInitialInvestigationState,
+  MAX_INVESTIGATION_CHECKS,
   recordCheckResult,
   setInvestigationStatus,
   validateSourceReference
@@ -75,5 +76,23 @@ describe("investigation state validation", () => {
     );
     expect(revised.status).toBe("resolved");
     expect(revised.resolutionSummary).toBe("Restored the correct endpoint binding");
+  });
+
+  it("bounds accumulated model-suggested checks", () => {
+    let state = createInitialInvestigationState();
+    for (let index = 0; index < 4; index += 1) {
+      state = applyModelInvestigationUpdate(
+        state,
+        {
+          suggestedChecks: Array.from(
+            { length: 12 },
+            (_, item) => `Check ${index}-${item}`
+          )
+        },
+        { idFactory: () => crypto.randomUUID() }
+      );
+    }
+
+    expect(state.checks).toHaveLength(MAX_INVESTIGATION_CHECKS);
   });
 });

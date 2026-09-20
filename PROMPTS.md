@@ -177,3 +177,72 @@ Append this prompt verbatim to PROMPTS.md. Update the README with implemented be
 Commit and push the completed milestone to the existing private repository after reviewing the changes for secrets and unintended files. Do not deploy or change repository visibility yet. Avoid unrelated refactors and machine-wide package changes.
 
 Finish with a concise report of what works, verification results, the commit hash, and any blockers.
+
+## 2026-09-20 — Submission preparation and deployment
+
+Prepare DeployLens for submission. Keep the current feature scope and verified model integration; focus on making the existing application accessible, reproducible, and ready for review.
+
+Inspect the current repository and instructions, then complete the following.
+
+1. Review the public demo boundary
+
+The current application uses investigation UUIDs in URLs and exposes Agent methods. Inspect the actual HTTP, WebSocket, RPC, and client-state update paths before deployment.
+
+Ensure clients cannot bypass server validation or overwrite protected investigation state through generic SDK state updates. Validate incoming method arguments at runtime, not only through TypeScript types.
+
+Add modest server-side rate limits for model requests and resource-creating operations, with clear user-facing errors. Preserve existing input, storage, tool-step, and timeout limits.
+
+Keep this a demonstration using synthetic or redacted logs. If investigation URLs grant access to their contents, explicitly document that behavior and tell users not to submit sensitive data. Do not describe UUID-based separation as authenticated access control.
+
+Fix concrete issues found in this review without introducing an unrelated authentication system or redesigning the app.
+
+2. Add reproducible automated verification
+
+Add a GitHub Actions workflow that runs on pushes and pull requests, installs dependencies with npm ci, and runs the existing type checks, deterministic tests, and production build.
+
+Use a supported Node version compatible with the project. CI must not require Cloudflare credentials or paid model calls. Keep real-model browser verification documented separately.
+
+Add focused regression tests for any substantive fixes made during this milestone.
+
+3. Deploy to my personal Cloudflare account
+
+I authorize deployment of DeployLens to my personal Cloudflare account under the registered ayushanandhere.workers.dev namespace.
+
+Inspect existing resources first. Deploy the production build using the project’s supported configuration and preserve the current Durable Object migrations.
+
+Do not purchase a plan, enable paid upgrades, or change billing settings. If deployment requires one of those actions, report the exact requirement.
+
+Verify the deployed application in a fresh browser session:
+
+- A synthetic example can be analyzed with a real streamed response.
+- Evidence references and the runbook match work.
+- A recorded check result and conversation survive reload.
+- A new investigation has separate history.
+- Markdown export downloads correctly.
+- The interface remains usable at mobile width.
+
+Report the actual deployment URL and distinguish production verification from earlier local checks.
+
+4. Prepare the repository for reviewers
+
+Update the README with:
+
+- The live demo URL near the top.
+- A short explanation of the problem and intended user.
+- A compact mapping of the assignment’s four requirements to the implementation: LLM, coordination, chat input, and persistent state.
+- Exact local setup, test, and deployment instructions.
+- A brief walkthrough using a synthetic example.
+- Architecture, access behavior, and known limitations.
+- A link to PROMPTS.md.
+
+Keep claims factual and concise. Preserve the chronological prompt history and append this prompt verbatim. Retain any required attribution or license notices from reused code.
+
+5. Publish and finish
+
+I authorize making ayushanandhere/deploylens public after reviewing both the current files and Git history for credentials, sensitive logs, or unintended private material.
+
+Commit and push the final changes. Verify that GitHub Actions passes and that the repository, README, source files, and PROMPTS.md are accessible without signing in.
+
+Do not submit the job application.
+
+Finish with the public repository URL, deployed demo URL, final commit hash, CI result, production verification results, and any remaining blockers. Do not add optional features or pursue the bundle-size advisory unless it causes an observed usability problem.

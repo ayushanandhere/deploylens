@@ -1,6 +1,6 @@
 # DeployLens
 
-**Current live demo:** [deploylens.ayushanandhere.workers.dev](https://deploylens.ayushanandhere.workers.dev). It still runs release `3b1ccd0`; the private-investigation changes on this branch are **not deployed**.
+**Live demo:** [deploylens.ayushanandhere.workers.dev](https://deploylens.ayushanandhere.workers.dev). The private-investigation milestone was deployed from commit `7188ec98d5d64f0a18b68cecb5b36e9f8a995ff4` as Worker version `e73842df-af35-4729-aad8-06e131014055` on 2026-09-21. Draft PR #1 remains unmerged while production smoke testing finishes.
 
 DeployLens helps developers investigate failed deployments without treating an AI guess as proof. It extracts line-referenced findings from logs, checks three curated runbooks, keeps hypotheses visibly unconfirmed, records human checks, and exports a Markdown handoff.
 
@@ -65,7 +65,7 @@ Cloudflare's Vite plugin [copies `.dev.vars` into build output for local preview
 
 To test private sign-in locally, register a **separate development GitHub OAuth app** at GitHub Developer Settings → OAuth Apps → New OAuth App. Set its homepage to `http://localhost:5173/` and callback to **`http://localhost:5173/auth/github/callback`**. Copy `.dev.vars.example` to ignored `.dev.vars` and fill `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` there. Set `PUBLIC_ORIGIN="http://localhost:5173"`. Do not paste those values into chat or commit them. Use one local hostname consistently; `127.0.0.1` is not interchangeable with `localhost` for this callback/cookie flow.
 
-For the eventual production release, register a **separate production GitHub OAuth app** under the intended owner at GitHub Developer Settings → OAuth Apps → New OAuth App:
+The separate production GitHub OAuth app was registered under the intended owner at GitHub Developer Settings → OAuth Apps with:
 
 | Field | Exact value |
 | --- | --- |
@@ -76,9 +76,9 @@ For the eventual production release, register a **separate production GitHub OAu
 | Expire user access tokens | On (supported; token is used once and discarded) |
 | Device flow | Off; no additional OAuth scopes are requested |
 
-The Worker needs **`GITHUB_CLIENT_ID`** and **`GITHUB_CLIENT_SECRET`** as secrets, never as `vars`. `PUBLIC_ORIGIN` is already `https://deploylens.ayushanandhere.workers.dev` in `wrangler.jsonc`; keep it in exact agreement with the callback origin. The currently deployed version is `37574fb4-a9fe-461e-aec5-ffd4ab56b85a` (read-only check on 2026-09-21); recheck immediately before release. No production OAuth secret has been configured by this branch's work.
+The Worker uses **`GITHUB_CLIENT_ID`** and **`GITHUB_CLIENT_SECRET`** as secrets, never as `vars`. `PUBLIC_ORIGIN` is `https://deploylens.ayushanandhere.workers.dev` in `wrangler.jsonc` and matches the callback origin. Both production secrets were uploaded alongside the approved code; their values are not in the repository or documentation. The former deployed version was `37574fb4-a9fe-461e-aec5-ffd4ab56b85a`.
 
-After merge **and explicit deployment approval**, place only the two production secret assignments in a user-owned (`0600`) `.env`-format file **outside this repository**, then deploy code and secrets together. Replace the placeholder path below with that absolute path; never print its contents or commit it:
+The approved deployment used a user-owned (`0600`) `.env`-format file **outside this repository** and uploaded code and secrets together. For a future release, replace the placeholder path below with the absolute path to a protected production secrets file; never print its contents or commit it:
 
 ```bash
 npm ci
@@ -88,7 +88,7 @@ npm run build
 npx wrangler deploy --secrets-file /absolute/private/path/deploylens-production.env
 ```
 
-`wrangler secret put` is not the staged setup command here: [it deploys a new version immediately](https://developers.cloudflare.com/workers/configuration/secrets/). The approved deploy retains `v1` for `DeployLensAgent` and applies `v2` for `DeployLensControl` and `DeployLensQuota`; do not remove these bindings or migration tags. This branch has **not** been deployed.
+`wrangler secret put` was not used because [it deploys a new version immediately](https://developers.cloudflare.com/workers/configuration/secrets/). The approved deploy retained `v1` for `DeployLensAgent` and applied `v2` for `DeployLensControl` and `DeployLensQuota`; do not remove these bindings or migration tags.
 
 ## Deletion, expiry, and legacy URLs
 
@@ -114,11 +114,13 @@ The 2026-09-21 release-readiness review confirmed that the deterministic fixture
 
 The per-invocation model guard now rechecks Control before and after atomic quota accounting, including later tool-loop steps; a deterministic race test verifies no new provider call after the tombstone is observed. A provider call already in progress may finish or be billed despite deletion, although the SDK abort signal and socket closure stop delivery. Earlier local two-tab tests saw no frames after deletion and no recreated Agent tables. The residual local-Vite log `Failed to reschedule alarm after keepAlive dispose: ... no such table: cf_agents_jobs` occurs when the installed Agents SDK's fire-and-forget keep-alive disposer races `destroy()` removing SDK tables. Source inspection shows that callback catches/logs the error; `destroy()` disables alarms, deletes storage, and marks the Agent destroyed. We found no evidence of a repeated alarm, storage recreation, or a later model invocation from that log, but this is **not a proof about production runtime behavior**. The log is not suppressed. The prior task-run finalizer error was removed by aborting and waiting for the chat turn before `destroy()`. Production socket/teardown behavior remains a smoke-test gate.
 
-Real ownership isolation between **two distinct GitHub accounts** remains unverified unless a second account is available. Deterministic two-user authorization tests do not replace that live test. Production socket behavior and the first `v2` deployment also remain pending; none of these branch changes are deployed.
+Production smoke testing on version `e73842df-af35-4729-aad8-06e131014055`: the anonymous database example streamed a real Workers AI answer, displayed source-line citations for three repeated `ECONNREFUSED` lines, and matched the database runbook. GitHub authorization for the new production app succeeded. A private investigation accepted a pasted **synthetic** four-line source, reopened all original lines, streamed a real response, and restored chat, citations, hypotheses, a user-reported check result, and the runbook match after reload. A second private investigation started empty; the owned listing reopened the original. Brave downloaded a 2,297-byte Markdown handoff, and its saved symptoms, line excerpts, unconfirmed hypothesis, check result, open questions, and unresolved status were inspected. These are production observations, not local substitutes.
+
+The two-tab in-flight deletion, stale-socket/source/export denial, logout, and Worker-log teardown review remain in progress. Real ownership isolation between **two distinct GitHub accounts** remains unverified unless a second account is available. Deterministic two-user authorization tests do not replace that live test. Do not treat the partial smoke result as PR merge approval.
 
 ## Proposed deployment and rollback
 
-Before deployment, explicitly accept that old bearer-like URLs will stop working and give anyone needing them a chance to export their own data from the current release. Register the production OAuth callback above, configure server-side secrets, confirm CI, and, ideally, complete a real two-account isolation test. Record the current deployed version ID and a clean Git commit. Deploy in a controlled window, then smoke-test with synthetic data: anonymous example and streamed evidence/runbook; GitHub login and private creation; reload/list/source/export; logout and denied old session; new investigation separation; owner deletion with a second tab open; a denied cross-account URL if a second account is available; and at least one in-flight deletion while watching Worker logs for teardown/alarm behavior. Check that quota-denial messages do not block saved reads. Do not delete the legacy Agent class or its data.
+The first controlled deployment occurred after explicitly accepting that old bearer-like URLs would stop working. Their underlying `DeployLensAgent` data was not deleted or assigned an owner. The production callback and secrets were configured, CI passed, and the deployed commit/version were recorded above. Remaining smoke gates are listed in Verification and limitations. A real two-account isolation test is still desirable before claiming that behavior as live-verified.
 
 Migration `v2` creates `DeployLensControl` and `DeployLensQuota` SQLite Durable Object classes; `v1` remains. [Cloudflare warns](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/) that a Worker version cannot be rolled back across a Durable Object class lifecycle change. If this first `v2` deployment fails, prepare a **forward-fix** Worker version from this branch that retains all three classes, their exact bindings, and both migration tags, while setting `INFERENCE_ENABLED="false"` if model usage must stop. Restore service with a new deploy; do not use the pre-`v2` release as a rollback target or remove the Control/Quota classes. After a stable post-`v2` version exists, a rollback among compatible versions may be possible. A code rollback does not undo Durable Object migrations, registry/quota writes, session issuance, or any completed deletion/expiry; destroyed investigation data is not restored by redeploying old code. Legacy Agent data remains stored under the `DeployLensAgent` class, but the new Control registry has no owner mapping for it, so the new HTTP gate denies old URLs. A future recovery must be a separately reviewed, proof-of-ownership path or an explicitly approved compatible legacy read/export build; never assign a legacy record to the first visitor. Verify the exact rollback target and resource compatibility before any rollback command.
 

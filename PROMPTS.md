@@ -405,3 +405,10 @@ Use only disposable synthetic test investigations. Let me complete interactive s
 6. Update documentation and PROMPTS.md without credentials. Commit and push any fixes or verification records to PR #1. Keep the PR unmerged pending the production results.
 
 Finish with the deployment URL/version, deployed commit, production test results, remaining limitations, and whether PR #1 is ready to merge. Do not add new features.
+
+## 2026-09-21 — Production OAuth authorization and deployment continuation
+
+Yes—I authorize submitting the prepared “DeployLens Production” GitHub OAuth app registration under my personal account and generating its client secret.
+Store the production credentials in a user-owned 0600 file outside the repository without displaying or committing them. Then continue the already-authorized controlled deployment and production smoke tests from the previous prompt.
+I accept that legacy bearer-like URLs will become inaccessible while their data is retained. Preserve the required Durable Object classes, bindings, and migrations. Do not change billing or delete legacy data.
+Keep PR #1 unmerged until you report the production results. Proceed without requesting the same authorization again; pause only for an actual blocker or interactive sign-in that requires me.

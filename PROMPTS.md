@@ -246,3 +246,78 @@ Commit and push the final changes. Verify that GitHub Actions passes and that th
 Do not submit the job application.
 
 Finish with the public repository URL, deployed demo URL, final commit hash, CI result, production verification results, and any remaining blockers. Do not add optional features or pursue the bundle-size advisory unless it causes an observed usability problem.
+
+## 2026-09-21 — Private investigations, shared limits, and lifecycle
+
+Implement the next DeployLens milestone: private investigations, shared usage limits, and investigation deletion/expiry.
+
+Start by reading the repository instructions, README, PROMPTS.md, current implementation, and Git status. The last recorded release is 3b1ccd0acab760dff571a611c83ee93787a4439d, but inspect the actual current state and preserve subsequent work. Work on a new feature branch.
+
+First explain your proposed design briefly, then implement it. Check current official documentation and compatibility with the installed Cloudflare Agents SDK before choosing authentication and lifecycle APIs. Make routine implementation decisions yourself.
+
+1. Private investigations and authentication
+
+Add “Continue with GitHub” for users who want to create and revisit private investigations. Use a maintained authentication library compatible with Cloudflare Workers where practical; explain the choice and avoid unnecessary dependencies.
+
+Bind ownership to the authenticated user’s stable provider ID. Enforce authorization on the server for every investigation access path, including HTTP, WebSocket connection, RPC/tool-triggering operations, source retrieval, export, deletion, and any investigation listing.
+
+A UUID or client-provided owner field must never grant access. A second account must not be able to read or modify another user’s investigation even if it knows the URL. Account for expired sessions on already-open connections.
+
+Use secure session handling, OAuth state validation, appropriate cookie settings, logout, and protections against cross-site mutation requests. Never expose OAuth secrets or session credentials to the client, logs, or documentation.
+
+If OAuth application registration or a secret requires my action, complete all work that can be implemented and tested without it. Then give me the exact setup steps, callback URLs, and secret names. Do not ask me to paste secrets into chat.
+
+2. Preserve a useful public demo
+
+Keep the existing public landing URL and a clearly labeled “Try the demo” path so recruiters can explore without signing in.
+
+Use the bundled synthetic scenarios for anonymous demonstrations. Enforce the demo source restrictions on the server; do not allow arbitrary log uploads or source creation through an overlooked RPC/tool path.
+
+Keep each visitor’s demo state separate using a server-issued session. Private investigations must remain separate from anonymous demonstrations. Explain the demo’s data and retention limits clearly in the UI.
+
+Preserve streaming, source citations, evidence/check tracking, reload restoration, and Markdown export where applicable.
+
+3. Usage limits that survive new investigation IDs
+
+Keep the existing per-investigation limits and add:
+
+* Per-authenticated-user model usage limits.
+* Anonymous demo session limits and a shared demo allowance.
+* An application-wide daily model-request ceiling and a configurable switch to disable new inference requests.
+
+Use atomic server-side accounting so concurrent requests and new UUIDs cannot bypass the shared ceiling. Count actual model invocations, including tool-loop steps and retries, and avoid unsafe automatic refunds after ambiguous failures.
+
+Make limits configurable and document the defaults. Fail closed for new inference if the quota service is unavailable, while keeping authorized reads, exports, and deletion available.
+
+Return a clear limit message and reset time. Describe these as request limits, not guaranteed monetary spending caps. Do not change billing or enable paid services.
+
+4. Deletion, expiry, and existing data
+
+Add an owner-only delete action with confirmation. Remove the investigation’s conversation, log sources, structured state, and listing entry. Close active connections and ensure stale requests or a reused URL cannot silently recreate the deleted investigation.
+
+Add configurable expiry for anonymous demo sessions, initially 48 hours. Use an appropriate server-side scheduling mechanism and verify that cleanup cannot race with active writes or recreate expired data. Document what deletion covers, including any platform-log limitations.
+
+Existing investigations currently use bearer-like URLs. Do not assign ownership to whoever opens one first. Define and implement a safe transition for these legacy records without automatically deleting them or pretending their owners can be inferred. Explain the effect on old URLs before deployment.
+
+5. Verification
+
+Add focused tests for:
+
+* Two users attempting to access each other’s investigations.
+* Unauthenticated, expired-session, and forged-owner requests.
+* HTTP, WebSocket, RPC, source, and export authorization.
+* Concurrent quota consumption and attempts to bypass limits with new UUIDs.
+* Deletion and expiry with stale connections or in-flight writes.
+* Demo restrictions and separation from private investigations.
+
+Run the existing checks and relevant browser flows. Use deterministic substitutes for routine CI; run small live authentication and Workers AI checks only when configured. Clearly distinguish verified behavior from configuration-dependent checks.
+
+6. Documentation and delivery
+
+Append this prompt verbatim to PROMPTS.md, excluding any future secret values. Update README and environment examples with setup instructions, architecture decisions, limits, legacy-data handling, and verified results.
+
+Keep this milestone focused. Preserve the existing model and diagnostic functionality unless a demonstrated compatibility problem requires a change.
+
+Review the diff and tracked files for secrets and unintended artifacts. Commit and push the feature branch to the existing repository and open a draft pull request. Do not merge or deploy this milestone yet.
+
+Finish with a concise report covering implemented behavior, test results, configuration I must complete, migration implications, remaining limitations, and the draft PR URL.

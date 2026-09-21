@@ -1,104 +1,82 @@
 # DeployLens
 
-**Live demo:** [deploylens.ayushanandhere.workers.dev](https://deploylens.ayushanandhere.workers.dev)
+**Current live demo:** [deploylens.ayushanandhere.workers.dev](https://deploylens.ayushanandhere.workers.dev). It still runs release `3b1ccd0`; the private-investigation changes on this branch are **not deployed**.
 
-DeployLens helps developers investigate deployment failures without pretending that an AI guess is proof. A developer supplies symptoms and synthetic or redacted logs; DeployLens extracts line-referenced evidence deterministically, matches a small curated runbook when the signals are strong enough, keeps hypotheses visibly unconfirmed, records checks, and exports a Markdown handoff.
+DeployLens helps developers investigate failed deployments without treating an AI guess as proof. It extracts line-referenced findings from logs, checks three curated runbooks, keeps hypotheses visibly unconfirmed, records human checks, and exports a Markdown handoff.
 
-> Public demo: an investigation URL grants access to that investigation's chat, logs, and saved state. UUIDs separate investigations but are not authentication or authorization. Do not submit secrets, credentials, sensitive production logs, or other private data.
-
-## Assignment requirements
-
-| Requirement | Implementation |
+| Assignment requirement | Implementation |
 | --- | --- |
-| LLM | Real streamed Workers AI responses from `@cf/openai/gpt-oss-20b`, with bounded AI SDK tool steps and timeouts. |
-| Coordination | Typed `analyzeLogs`, `lookupRunbook`, and `updateInvestigation` tools coordinate deterministic evidence, curated guidance, and model-generated hypotheses. |
-| Chat input | React chat supports streamed responses, failures, follow-ups, log attachment, and three synthetic examples. |
-| Persistent state | One Agents SDK Durable Object per investigation persists chat and compact investigation state; original log sources remain in that object's SQLite storage. |
+| LLM | Real streamed Workers AI responses from `@cf/openai/gpt-oss-20b`, with bounded tool steps and timeouts. |
+| Coordination | Typed log-analysis, runbook-lookup, and investigation-update tools join deterministic findings with AI guidance. |
+| Chat input | React chat supports follow-ups, streaming, errors, and log/source controls. |
+| Persistent state | One Agents SDK SQLite Durable Object per investigation stores chat, compact state, and original log sources. |
 
-## Try the demo
+## Using the app
 
-1. Open the live demo and select **Database connection failure**. Examples always open in a new investigation.
-2. Select **Analyze**. The evidence board should cite lines 2–4, count the repeated `ECONNREFUSED` pattern three times, and match **Database connection failures**.
-3. Select a `SOURCE:L#` reference to inspect the original numbered source.
-4. Record a synthetic result for one suggested check, ask a follow-up, and reload the page.
-5. Select **New investigation** to confirm it starts empty. Reopen the earlier URL to restore its separate state.
-6. Select **Export Markdown** for a handoff generated from saved state without another model call.
+Select **Try the demo** by opening the landing URL without signing in, then choose a labeled synthetic example such as **Database connection failure**. The example opens in a new investigation. Select **Analyze** to see cited source lines and a deterministic runbook match. Record a check result, ask a follow-up, reload, and export a Markdown handoff. The three examples cover an environment variable, a database connection, and an upstream timeout.
 
-The other examples cover a missing environment variable and an upstream timeout. DeployLens never executes suggested commands, fetches model-supplied URLs, or modifies infrastructure; checks are instructions for a human to evaluate.
+The anonymous demo accepts **only bundled synthetic log sources**; direct RPC attempts to attach arbitrary logs are rejected. Demo chat and check-result text can still be entered, so do not type secrets or sensitive incident details. A server-issued, host-only session cookie separates visitors; its investigations expire **48 hours after session creation**, not 48 hours after the last visit. Anyone with that browser session can access its demo history. Private investigations require GitHub sign-in and are bound to GitHub's stable numeric user ID, not to a URL or username.
 
-## Architecture and safety boundary
+## Architecture and access
 
-- **React + Vite client:** streaming chat and an evidence panel are side by side on desktop and stack at mobile width.
-- **Cloudflare Worker + Agents SDK:** `AIChatAgent` owns conversation history and resumable streams. One Durable Object instance is addressed by each investigation UUID.
-- **Compact persisted state:** evidence, hypotheses, checks, open questions, runbook matches, and status use Agent state. Chat is not copied into a second store.
-- **Log storage:** pasted source text stays server-side in the investigation's Durable Object SQLite database. State contains source metadata and bounded findings.
-- **Deterministic evidence:** TypeScript parsing conservatively extracts timestamps, recognizable errors/codes, and repeated exact patterns while retaining unrecognized numbered lines. Limits are 80,000 characters, 2,000 lines, and 10 sources per investigation.
-- **Curated matching:** three repository-owned runbooks use a small weighted matcher, explain matched signals, and allow an unmatched result. No embeddings or vector database are used.
-- **Model tools:** the AI SDK bounds the tool loop to six steps. Runtime schemas, ownership checks, source-line validation, and state caps are enforced server-side. A narrow middleware recovers only forced tool calls that GPT-OSS emits as complete JSON or an empty argument object; normal prose is never reinterpreted as a tool call.
-- **Validated public surface:** callable RPC arguments are validated at runtime. Generic client-to-server Agent state updates are rejected, so clients must use the validated methods. Server state broadcasts remain enabled.
-- **Demo rate limits:** each investigation permits 12 model turns and 20 resource-creating updates per rolling 10 minutes, with a retry message. These are modest abuse guardrails, not account-wide protection; creating another investigation creates another Durable Object and limit bucket.
-- **Deterministic export:** Markdown is generated from saved state and source excerpts without an additional model request.
+- React/Vite client: chat and evidence panel side by side on desktop, stacked on mobile. The client receives no OAuth token or Worker secret.
+- Worker: handles GitHub OAuth, sessions, investigation creation/listing/deletion, same-origin mutation checks, and the Agent route gate.
+- `DeployLensControl`: singleton SQLite Durable Object for hashed opaque sessions, one-use OAuth state and PKCE verifier, ownership/lifecycle records, and creation limits. Only server-created UUIDs enter its registry.
+- `DeployLensQuota`: separate singleton SQLite Durable Object for atomic daily model-request accounting. If it is unavailable, new inference fails closed; the independent ownership registry can still authorize reads, exports, and deletion.
+- `DeployLensAgent`: one Agents SDK Durable Object per investigation. Chat stays in SDK-managed persistence; compact evidence/check state and original log sources stay with that Agent. The Worker rejects unauthorized HTTP/WebSocket upgrades before SDK state is sent. The Agent revalidates each WebSocket frame before SDK chat/RPC dispatch, and each callable and model/tool step checks again. Generic client state updates remain rejected.
 
-Runtime model instructions are in `src/agent/system-prompt.ts`; runbooks are in `src/runbooks/catalog.ts`. Development prompts are kept separately in [PROMPTS.md](./PROMPTS.md).
+GitHub OAuth uses [`oauth4webapi`](https://github.com/panva/oauth4webapi), a maintained Web API-based OAuth library that explicitly supports Cloudflare Workers. It handles the authorization-code exchange and protocol validation. DeployLens adds one-use state storage, PKCE, and an opaque server-side session. Cookies are `HttpOnly`, host-only, `SameSite=Lax`, and `Secure` on HTTPS. Mutating API requests and WebSocket upgrades require an exact same-origin `Origin`. Logout revokes the session and asks known Agent connections to close; scheduled Agent callbacks do the same at session expiry. Every incoming frame is reauthorized even if a transport remains open. Ownership is never taken from a client field.
+
+No suggested check is executed by DeployLens. Logs and tool results are untrusted data; the app does not fetch arbitrary URLs or change infrastructure.
+
+## Limits
+
+Defaults live in `wrangler.jsonc` and can be changed as Worker vars. All daily windows reset at 00:00 UTC. These are **model-request limits**, not guaranteed monetary spending caps; provider pricing and billing are outside the app.
+
+| Limit | Default |
+| --- | ---: |
+| Per investigation | 12 model turns and 20 resource updates per rolling 10 minutes |
+| Per authenticated GitHub user | 80 model invocations/day across all sessions and investigation IDs |
+| Per demo session | 12 model invocations/day (`DEMO_SESSION_MODEL_DAILY`); 8 new investigations/day (`DEMO_INVESTIGATIONS_DAILY`) |
+| Shared anonymous demo | 240 model invocations/day (`DEMO_SHARED_MODEL_DAILY`); 500 new investigations/day (`DEMO_SHARED_INVESTIGATIONS_DAILY`) |
+| Shared demo session creation | 1,000 new browser sessions/day (`DEMO_SESSIONS_DAILY`) |
+| Application-wide | 500 model invocations/day |
+| Private investigation creation | 30 new investigations/day per GitHub user (`PRIVATE_INVESTIGATIONS_DAILY`) |
+| Demo expiry | 48 hours from session creation (`DEMO_TTL_HOURS`) |
+| Private session expiry | 14 days (`PRIVATE_SESSION_DAYS`) |
+
+`INFERENCE_ENABLED="false"` disables new model invocations without blocking saved data. Every provider invocation, including a tool-loop step, is charged before the provider call. Automatic model retries are disabled (`maxRetries: 0`), so there are no hidden uncounted retries. Quota increments are atomic and never automatically refunded after an ambiguous failure. Existing input, source-size, persisted-message, tool-step, output-token, and timeout bounds remain in place. Changing these request limits does not change Cloudflare billing settings.
 
 ## Local setup
 
-Prerequisites:
-
-- Node.js 22.12 or newer
-- A Cloudflare account with Workers AI access
-- Wrangler authenticated to that account
+Requires Node.js **22.12+**, npm, and a Cloudflare account with Workers AI access for live model calls. Routine checks use deterministic substitutes and need no credentials.
 
 ```bash
 npm ci
-npx wrangler login
+npm run check
 npm run dev
 ```
 
-Open the URL printed by Vite, normally `http://localhost:5173`. Local development uses the remote `AI` binding in `wrangler.jsonc`; there is no model API key or required `.env` file. Never add credentials to the repository.
+Open the Vite URL (normally `http://localhost:5173`). The bundled demo works without GitHub OAuth configuration. Live Workers AI calls require a valid Wrangler login and the configured remote AI binding (`npx wrangler login`). Never commit `.dev.vars`, `.env`, `.wrangler/`, `dist/`, or credentials.
 
-## Verification
+To test private sign-in locally, register a **separate development GitHub OAuth app** at GitHub Developer Settings → OAuth Apps → New OAuth App. Set its homepage to `http://localhost:5173/` and callback to **`http://localhost:5173/auth/github/callback`**. Copy `.dev.vars.example` to ignored `.dev.vars` and fill `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` there. Set `PUBLIC_ORIGIN="http://localhost:5173"`. Do not paste those values into chat or commit them. Use one local hostname consistently; `127.0.0.1` is not interchangeable with `localhost` for this callback/cookie flow.
 
-The reproducible local/CI check does not require Cloudflare credentials or paid model calls:
+For the eventual production release, register a production GitHub OAuth app with homepage **`https://deploylens.ayushanandhere.workers.dev/`** and callback **`https://deploylens.ayushanandhere.workers.dev/auth/github/callback`**. Configure the Worker secrets named **`GITHUB_CLIENT_ID`** and **`GITHUB_CLIENT_SECRET`** server-side when that release is approved. `PUBLIC_ORIGIN` already points to the production origin in `wrangler.jsonc`. Be aware that `wrangler secret put` immediately creates/deploys a Worker version; do **not** run it for this unmerged branch. No production OAuth secret has been configured by this milestone.
 
-```bash
-npm run check
-```
+After approval and configuration, the usual deployment command is `npm run deploy`; it builds first and preserves migration `v1` for investigation Agents while adding `v2` for the control and quota Durable Objects. This branch has **not** been deployed.
 
-This runs TypeScript, 31 deterministic tests across 9 files, and both Worker and client production builds. Tests cover source-line accuracy, repeated patterns, malformed/oversized/unmatched input, investigation ownership, structured state bounds, user-controlled resolution, Markdown export, runtime RPC validation, rate-limit decisions, and forced-tool provider regressions. GitHub Actions runs the same command after `npm ci` on pushes and pull requests with Node 22.
+## Deletion, expiry, and legacy URLs
 
-Production browser verification on 2026-09-20 confirmed:
+An authenticated owner can confirm **Delete**. The registry first tombstones the ID, rejecting stale HTTP/WS/RPC/tool/model activity and preventing a reused URL from recreating the record. The Agent then closes connections and calls the installed SDK's `destroy()` lifecycle API to remove its chat, state, logs, scheduled work, and SQLite storage; a failed cleanup stays tombstoned and is retried by a Durable Object alarm. Deleted records disappear from listings, while the minimal tombstone remains to prevent reuse. Demo session expiry follows the same deny-before-cleanup ordering, with a control-DO alarm and retry. Deletion cannot erase Cloudflare platform logs, telemetry, or platform-managed recovery backups that may persist under Cloudflare's retention policies.
 
-- a fresh synthetic database example produced a real streamed Workers AI response;
-- deterministic references cited lines 2–4, counted three repeated errors, and matched the database runbook from `postgres`, `5432`, and `econnrefused`;
-- a source reference opened the original numbered log;
-- a user-recorded synthetic check, investigation state, and real chat messages survived reload;
-- a separate investigation had separate empty history, and reopening the original URL restored its evidence and result;
-- a follow-up response used the preceding configuration-change context;
-- Markdown downloaded with symptoms, excerpts, hypotheses, checks/results, questions, and unresolved status;
-- the interface remained readable and operable at a 390 × 844 viewport;
-- a raw WebSocket state overwrite was rejected, and a malformed RPC argument received a validation error.
+**Migration warning before deployment:** release `3b1ccd0` investigations used bearer-like UUID URLs. Their ownership cannot be inferred. This branch deliberately does **not** assign them to the first visitor, list them, or automatically delete them. Their old URLs become inaccessible under the new route gate; the underlying Durable Object data remains untouched. A future, separately approved proof-of-ownership/migration or retention process would be needed. Do not deploy this branch expecting old URL continuity.
 
-## Deployment
+## Verification and limitations
 
-Review `wrangler.jsonc`, authenticate Wrangler, run the full check, then deploy:
+`npm run check` runs TypeScript, deterministic Vitest tests, and the production Worker/client build. GitHub Actions runs it on pushes and pull requests with Node 22 and no Cloudflare credentials. Focused tests cover owner/demo separation, unauthenticated and expired sessions, HTTP/Agent route and WebSocket-upgrade checks, cross-site requests, deletion tombstones, direct demo attachment policy, and shared quota keys/concurrent consumption. The original parsing, runbook, state, and export tests remain.
 
-```bash
-npm ci
-npm run check
-npx wrangler login
-npm run deploy
-```
+Local checks on 2026-09-21: a real streamed Workers AI response to the synthetic database example produced source references for lines 2–4, a three-occurrence repeated error, and the database runbook match. The actual assistant messages and panel state restored after reload. A second synthetic environment-variable example also streamed with the new shared quota path; a recorded check result informed a follow-up response, and both survived reload. Opening a new investigation gave empty history, while reopening the original restored its chat and evidence. Separate server-issued demo sessions received distinct histories; direct source retrieval with the other session returned 404, and unauthenticated access returned 401. A direct demo `attachLog` RPC returned the intended restriction error. After logout, a stale session could not read or get an RPC export response. Markdown export returned a success notice from saved state, but the in-app browser did not surface a download event, so the file-download step remains unverified on this branch. A narrow-viewport DOM check showed no horizontal document overflow. In local Vite development, the raw WebSocket client's close handshake did not complete promptly despite the Agent reporting that it issued close; this needs production verification. These checks were against local development, **not production**. GitHub OAuth with two real accounts, live private deletion, and 48-hour expiry cannot be end-to-end verified until the OAuth apps/secrets are configured and this branch is deployed; deterministic tests cover their access decisions and tombstone behavior. The earlier production verification applies only to release `3b1ccd0`.
 
-`npm run deploy` builds first and preserves the configured Durable Object migration. The deployed Worker uses the account's Workers AI binding; do not place Cloudflare credentials in project files.
+Parsing remains conservative, runbooks cover only three incident families, model hypotheses can be wrong, and only the user may mark an investigation resolved. GitHub account authorization protects private investigations but does not replace organizational identity/access governance. Recent listings are capped at 100 items; an older owned investigation can still be opened by its URL.
 
-## Known limitations
-
-- Investigation links are bearer-like public links, not user accounts or authenticated access control.
-- Parsing is intentionally conservative and recognizes common deployment-log shapes rather than every format.
-- Runbook lookup covers exactly three failure families; weak or tied signals remain unmatched.
-- Model hypotheses and checks can be wrong and remain guidance for a developer to verify. Only the user can mark an investigation resolved.
-- Per-investigation limits are suitable for a review demo, not a substitute for identity-based production abuse controls.
-- Workers AI model output can vary. Provider edge cases are bounded and validated, but a failed model/tool turn may need a retry; saved evidence is retained.
-
-ChatGPT helped draft the development prompts, and Codex assisted with implementation. The project follows Cloudflare's documented [Agents SDK](https://developers.cloudflare.com/agents/) and [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/) patterns.
+Runtime model instructions are in `src/agent/system-prompt.ts`; development history is in [PROMPTS.md](./PROMPTS.md). ChatGPT helped draft the development prompts, and Codex assisted with implementation. Any required license notices from reused packages remain in their upstream packages.

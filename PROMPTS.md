@@ -381,3 +381,27 @@ Run checks needed for any changes, update README and PROMPTS.md, review the diff
 Do not merge, deploy, change billing, or delete legacy production data. Avoid repeating already-completed browser checks unless a change affects them.
 
 Finish with a clear release-readiness verdict, any concrete blockers, and the exact production setup steps I must complete.
+
+## 2026-09-21 — Controlled production deployment
+
+Proceed with a controlled production deployment of the private-investigation milestone from PR #1.
+
+I authorize this deployment and accept that existing bearer-like investigation URLs will become inaccessible while their data is retained without assigning ownership. Do not delete legacy data. Do not change billing.
+
+1. Inspect the current branch, PR, CI, and deployment state. Use the reviewed milestone at commit 89856828a3a80432f317780fdb60155937cf4d95 or its verified successor. Preserve unrelated work.
+2. Configure the separate production OAuth credentials I provide in a user-owned 0600 file outside the repository. Never print or commit them. Confirm the production origin and callback configuration. Do not overwrite development credentials.
+3. Run the required release checks and deploy with the production secrets file using the supported Wrangler workflow. Preserve all Durable Object classes, bindings, and migration tags required by migration v2. Record the deployed commit and version.
+4. Perform focused production smoke tests:
+
+- Anonymous synthetic demo, streaming, citations, and runbook matching.
+- Real GitHub sign-in, private creation/listing, reload restoration, source retrieval, Markdown download, and logout.
+- Two-tab deletion during an active model response.
+- Denial of stale socket operations, source/export requests, and reopened deleted URLs.
+- Worker-log review for teardown errors, repeated alarms, or evidence of storage recreation.
+
+Use only disposable synthetic test investigations. Let me complete interactive sign-in when needed. If a second real GitHub account is unavailable, retain that limitation explicitly; do not repeat synthetic tests and call them live two-account verification.
+
+5. If a production gate fails, stop release finalization, report the impact, and apply a focused forward-fix retaining the required classes and migrations. Do not attempt an unsupported rollback to the pre-v2 release.
+6. Update documentation and PROMPTS.md without credentials. Commit and push any fixes or verification records to PR #1. Keep the PR unmerged pending the production results.
+
+Finish with the deployment URL/version, deployed commit, production test results, remaining limitations, and whether PR #1 is ready to merge. Do not add new features.

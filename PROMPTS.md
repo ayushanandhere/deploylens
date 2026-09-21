@@ -363,3 +363,21 @@ The attached screenshot shows my registered development GitHub OAuth app’s Cli
 Do not merge or deploy. Do not change billing or delete legacy production data. Finish with a concise readiness report and any remaining blockers.
 
 Proceed without asking me to manually create the configuration file.
+
+## 2026-09-21 — Release-readiness review
+
+Continue DeployLens on the existing branch and draft PR #1. The last reported commit is 5392065b938dfbddea6f4984ff9c49bfe4ee690e; inspect the actual current state first.
+
+Complete a focused release-readiness review without adding features.
+
+1. Review authorization across HTTP, WebSocket, RPC, source retrieval, export, listing, and deletion. Confirm deterministic tests use distinct provider user IDs and cover attempts by one user to access another user’s investigation. Keep real two-account OAuth isolation explicitly unverified unless a second account becomes available.
+2. Investigate the keep-alive alarm error when deletion interrupts a model response. Determine whether it can cause continued inference, unhandled failures, storage recreation, or repeated alarms. Fix application defects. If it is an SDK/runtime issue, document the reproduction, observed impact, and evidence supporting whether it blocks release. Do not merely suppress the error.
+3. Review the distinction between GitHub access-token expiry and application-session expiry. Use a controlled clock or local-only shortened lifetime to verify the applicable behavior, including an already-open WebSocket. Do not claim that an actual eight-hour expiry was tested.
+4. Prepare exact production OAuth registration fields, callback URL, required configuration and secret names, deployment commands, and a short production smoke-test checklist. Never include secret values. Confirm whether migration v2 and its Control/Quota classes still require a forward-fix strategy.
+5. Document how deployment changes old bearer-like investigation URLs and preserves legacy data. Provide a concrete recovery plan that retains required Durable Object classes and bindings.
+
+Run checks needed for any changes, update README and PROMPTS.md, review the diff for secrets, and commit and push to the existing PR.
+
+Do not merge, deploy, change billing, or delete legacy production data. Avoid repeating already-completed browser checks unless a change affects them.
+
+Finish with a clear release-readiness verdict, any concrete blockers, and the exact production setup steps I must complete.

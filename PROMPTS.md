@@ -412,3 +412,11 @@ Yes—I authorize submitting the prepared “DeployLens Production” GitHub OAu
 Store the production credentials in a user-owned 0600 file outside the repository without displaying or committing them. Then continue the already-authorized controlled deployment and production smoke tests from the previous prompt.
 I accept that legacy bearer-like URLs will become inaccessible while their data is retained. Preserve the required Durable Object classes, bindings, and migrations. Do not change billing or delete legacy data.
 Keep PR #1 unmerged until you report the production results. Proceed without requesting the same authorization again; pause only for an actual blocker or interactive sign-in that requires me.
+
+## 2026-09-21 — Production smoke-test deletion authorization
+
+Yes—I authorize permanently deleting the disposable synthetic test investigation identified as 2092a31e. Complete its in-app confirmation after verifying the target matches. This authorization does not cover legacy data or unrelated investigations.
+Finish the production smoke tests: two-tab deletion during an active model response, stale socket/source/export denial, denial when reopening the deleted URL, Worker-log review for teardown errors or storage recreation, and logout.
+If the current investigation no longer has an active model response, you may create and delete additional disposable synthetic test investigations solely to complete these checks.
+Fix concrete defects if found within the previously authorized deployment scope. Update the verification record and PROMPTS.md, push changes, and confirm CI. Keep real two-account OAuth isolation explicitly unverified unless a second account is available.
+Do not merge PR #1 yet. Report the final production results and whether any concrete release blockers remain. Do not request deletion authorization again for these disposable test investigations.

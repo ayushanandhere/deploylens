@@ -35,6 +35,13 @@ export function nextUtcReset(now: number): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
 }
 
+export function demoTtlHours(value: string | undefined, publicOrigin: string): number {
+  const parsed = Number(value);
+  const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(publicOrigin);
+  const minimum = localOrigin ? 1 / 3600 : 1;
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= 168 ? parsed : 48;
+}
+
 export function quotaError(label: string, resetAt: number): string {
   return `${label} request limit reached. New model requests reset at ${new Date(resetAt).toISOString()}.`;
 }

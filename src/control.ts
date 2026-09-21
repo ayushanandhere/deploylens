@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { canAccessInvestigation, nextUtcReset, type InvestigationAccess, type Principal } from "./lib/access-policy";
+import { canAccessInvestigation, demoTtlHours, nextUtcReset, type InvestigationAccess, type Principal } from "./lib/access-policy";
 import { isInvestigationId } from "./lib/investigation";
 
 type SessionRow = { token_hash: string; kind: "demo" | "private"; user_id: string | null; expires_at: number };
@@ -50,7 +50,7 @@ export class DeployLensControl extends DurableObject<Env> {
     }
     const now = Date.now();
     const expiresAt = now + (kind === "demo"
-      ? configuredNumber(this.env.DEMO_TTL_HOURS, 48, 1, 168) * 3_600_000
+      ? demoTtlHours(this.env.DEMO_TTL_HOURS, this.env.PUBLIC_ORIGIN) * 3_600_000
       : configuredNumber(this.env.PRIVATE_SESSION_DAYS, 14, 1, 30) * 86_400_000);
     this.ctx.storage.transactionSync(() => {
       if (kind === "demo") this.consume("sessions/demo-shared", "all", configuredNumber(this.env.DEMO_SESSIONS_DAILY, 1000, 1, 100_000), now, "Demo session creation");

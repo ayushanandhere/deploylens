@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as oauth from "oauth4webapi";
 import { digest, handleAppRequest } from "./auth";
 import type { Principal } from "./lib/access-policy";
 
@@ -104,5 +105,21 @@ describe("HTTP and WebSocket route authorization", () => {
     expect((await handleAppRequest(new Request(callback), env))?.status).toBe(400);
     states.delete(await digest(state));
     expect((await handleAppRequest(new Request(callback, { headers: { Cookie: stateCookie } }), env))?.status).toBe(400);
+  });
+
+  it("accepts GitHub-style expiring access tokens at sign-in", async () => {
+    const result = await oauth.processAuthorizationCodeResponse(
+      { issuer: "https://github.com", authorization_endpoint: "https://github.com/login/oauth/authorize", token_endpoint: "https://github.com/login/oauth/access_token" },
+      { client_id: "test-client-id" },
+      new Response(JSON.stringify({
+        access_token: "synthetic-access-token",
+        token_type: "bearer",
+        expires_in: 28_800,
+        refresh_token: "synthetic-refresh-token",
+        refresh_token_expires_in: 15_897_600
+      }), { status: 200, headers: { "Content-Type": "application/json" } })
+    );
+    expect(result.expires_in).toBe(28_800);
+    expect(result.refresh_token).toBe("synthetic-refresh-token");
   });
 });

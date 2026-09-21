@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertLogAttachmentAllowed, canAccessInvestigation, isAgentPath, nextUtcReset, originAllowed, type InvestigationAccess, type Principal } from "./access-policy";
+import { assertLogAttachmentAllowed, canAccessInvestigation, demoTtlHours, isAgentPath, nextUtcReset, originAllowed, type InvestigationAccess, type Principal } from "./access-policy";
 
 const id = "11111111-1111-4111-8111-111111111111";
 const now = Date.parse("2026-09-21T12:00:00Z");
@@ -39,5 +39,11 @@ describe("investigation authorization", () => {
   it("rejects arbitrary demo log attachment even through a direct callable invocation", () => {
     expect(() => assertLogAttachmentAllowed({ kind: "demo", userId: null, sessionHash: "x", expiresAt: now + 1000 })).toThrow(/bundled synthetic examples/);
     expect(() => assertLogAttachmentAllowed(alice)).not.toThrow();
+  });
+
+  it("permits a short anonymous TTL only on a local origin", () => {
+    expect(demoTtlHours("0.02", "http://localhost:8787")).toBe(0.02);
+    expect(demoTtlHours("0.02", "https://deploylens.example")).toBe(48);
+    expect(demoTtlHours("48", "https://deploylens.example")).toBe(48);
   });
 });

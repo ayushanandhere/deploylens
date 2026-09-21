@@ -321,3 +321,28 @@ Keep this milestone focused. Preserve the existing model and diagnostic function
 Review the diff and tracked files for secrets and unintended artifacts. Commit and push the feature branch to the existing repository and open a draft pull request. Do not merge or deploy this milestone yet.
 
 Finish with a concise report covering implemented behavior, test results, configuration I must complete, migration implications, remaining limitations, and the draft PR URL.
+
+## 2026-09-21 — Pre-merge private-investigation verification
+
+Continue the private-investigation milestone on codex/private-investigations and draft PR #1.
+
+I have registered the development GitHub OAuth app and configured its credentials in the local ignored .dev.vars file. Verify that the required variables exist without printing their values. Preserve other local configuration.
+
+Complete the remaining pre-merge verification:
+
+1. Test real GitHub sign-in, private investigation creation, reload restoration, listing, source access, export, and logout. Confirm the callback URL matches the actual local server. Check compatibility with the OAuth app’s token-expiration settings.
+2. Verify ownership isolation using two real GitHub accounts in separate browser profiles if available. Let me perform interactive sign-in. If a second account is unavailable, run the deterministic two-user authorization tests and explicitly retain real two-account OAuth as unverified. Do not treat two sessions of the same account as two different users.
+3. Test deletion while another tab has the investigation open and while an update or model response is in flight. Confirm stale sockets, requests, exports, and reopened URLs cannot expose or recreate deleted data.
+4. Test anonymous expiry using a local-only shortened retention setting or controlled clock. Verify server-side cleanup and denial of stale access, then restore the normal 48-hour configuration. Do not alter production retention or existing deployed data.
+5. Verify Markdown export in a regular browser such as Brave or Chrome. Confirm an actual file downloads and inspect its contents; a success notice alone is insufficient.
+6. Fix issues found, run the affected regression tests and npm run check, and update README with precise results and remaining limitations. Keep production socket behavior explicitly pending until tested in a deployed environment.
+
+Append this prompt verbatim to PROMPTS.md. Review the diff for credentials and unintended files, commit the fixes, and push to the existing branch and draft PR.
+
+Do not merge, deploy, change billing, or delete legacy production investigations.
+
+Finish with the verification results, any specific manual steps still needed, and a concrete proposed deployment and rollback plan. Identify any Durable Object migrations or data changes that a code rollback would not reverse.
+
+## 2026-09-21 — Continuation
+
+Continue.

@@ -68,6 +68,7 @@ import { DeployLensControl } from "./control";
 import { DeployLensQuota } from "./quota";
 import { assertLogAttachmentAllowed, type Principal } from "./lib/access-policy";
 import { authorizedModelInvocation } from "./lib/model-authorization";
+import { scheduleInvestigationTeardown } from "./lib/investigation-teardown";
 
 export { DeployLensControl, DeployLensQuota };
 
@@ -244,14 +245,15 @@ export class DeployLensAgent extends AIChatAgent<Env, InvestigationState> {
   }
 
   async purgeInvestigation(): Promise<void> {
-    for (const connection of this.getConnections()) connection.close(4001, "Investigation deleted or expired");
-    // The control DO has already tombstoned this ID. Abort an active chat turn
-    // and let its SDK fiber settle before destroy() removes the fiber tables.
-    // Without this drain, a racing recovery/finalizer can write after deleteAll.
-    this.abortAllRequests(new Error("Investigation deleted or expired"));
-    const stable = await this.waitUntilStable({ timeout: 10_000, pendingInteraction: () => false });
-    if (!stable) console.warn("Chat turn did not settle before investigation teardown; SDK destroy will cancel remaining work.");
-    await this.destroy();
+    await scheduleInvestigationTeardown({
+      closeConnections: () => {
+        for (const connection of this.getConnections()) connection.close(4001, "Investigation deleted or expired");
+      },
+      abortRequests: () => this.abortAllRequests(new Error("Investigation deleted or expired")),
+      waitUntilStable: () => this.waitUntilStable({ timeout: 10_000, pendingInteraction: () => false }),
+      warnIfUnstable: () => console.warn("Chat turn did not settle before investigation teardown; SDK scheduled destroy will cancel remaining work."),
+      scheduleDestroy: () => this._cf_scheduleDestroy()
+    });
   }
 
   async closeSessionConnections(tokenHash: string): Promise<{ seen: number; closed: number }> {

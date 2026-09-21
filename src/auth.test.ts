@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as oauth from "oauth4webapi";
 import { digest, handleAppRequest } from "./auth";
 import type { Principal } from "./lib/access-policy";
@@ -109,7 +109,7 @@ describe("HTTP and WebSocket route authorization", () => {
 
   it("accepts GitHub-style expiring access tokens at sign-in", async () => {
     const result = await oauth.processAuthorizationCodeResponse(
-      { issuer: "https://github.com", authorization_endpoint: "https://github.com/login/oauth/authorize", token_endpoint: "https://github.com/login/oauth/access_token" },
+      { issuer: "https://github.com/login/oauth", authorization_endpoint: "https://github.com/login/oauth/authorize", token_endpoint: "https://github.com/login/oauth/access_token" },
       { client_id: "test-client-id" },
       new Response(JSON.stringify({
         access_token: "synthetic-access-token",
@@ -121,5 +121,68 @@ describe("HTTP and WebSocket route authorization", () => {
     );
     expect(result.expires_in).toBe(28_800);
     expect(result.refresh_token).toBe("synthetic-refresh-token");
+  });
+
+  it("accepts GitHub's callback issuer and rejects a forged issuer", () => {
+    const server = {
+      issuer: "https://github.com/login/oauth",
+      authorization_endpoint: "https://github.com/login/oauth/authorize",
+      token_endpoint: "https://github.com/login/oauth/access_token"
+    };
+    const client = { client_id: "synthetic-client" };
+    const callback = new URL("http://localhost:5173/auth/github/callback?code=synthetic&state=synthetic&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth");
+    expect(oauth.validateAuthResponse(server, client, callback, "synthetic")).toBeInstanceOf(URLSearchParams);
+    callback.searchParams.set("iss", "https://attacker.example");
+    expect(() => oauth.validateAuthResponse(server, client, callback, "synthetic")).toThrow(/unexpected "iss"/);
+  });
+
+  it("completes the app callback with GitHub's issuer and an expiring token", async () => {
+    const states = new Map<string, string>();
+    let createdUserId: string | null = null;
+    const control = {
+      saveOAuthState: async (hash: string, verifier: string) => { states.set(hash, verifier); },
+      consumeOAuthState: async (hash: string) => { const value = states.get(hash) ?? null; states.delete(hash); return value; },
+      resolveSession: async () => null,
+      createSession: async (hash: string, kind: "private", userId: string) => {
+        expect(kind).toBe("private");
+        createdUserId = userId;
+        return { kind, sessionHash: hash, userId, expiresAt: Date.now() + 60_000 };
+      }
+    };
+    const env = {
+      PUBLIC_ORIGIN: origin,
+      GITHUB_CLIENT_ID: "synthetic-client",
+      GITHUB_CLIENT_SECRET: "synthetic-secret",
+      DeployLensControl: { getByName: () => control }
+    } as unknown as Env;
+    const started = await handleAppRequest(new Request(`${origin}/auth/github`), env);
+    const stateCookie = started!.headers.get("Set-Cookie")!.split(";")[0]!;
+    const state = stateCookie.split("=")[1]!;
+    const callback = new URL(`${origin}/auth/github/callback`);
+    callback.searchParams.set("code", "synthetic-code");
+    callback.searchParams.set("state", state);
+    callback.searchParams.set("iss", "https://github.com/login/oauth");
+    const fetchStub = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === "https://github.com/login/oauth/access_token") {
+        return Response.json({
+          access_token: "synthetic-access-token",
+          token_type: "bearer",
+          expires_in: 28_800,
+          refresh_token: "synthetic-refresh-token"
+        });
+      }
+      if (url === "https://api.github.com/user") return Response.json({ id: 101 });
+      throw new Error("Unexpected outbound request");
+    });
+    try {
+      const result = await handleAppRequest(new Request(callback, { headers: { Cookie: stateCookie } }), env);
+      expect(result?.status).toBe(302);
+      expect(result?.headers.get("Location")).toBe(`${origin}/`);
+      expect(result?.headers.get("Set-Cookie")).toContain("dl_session=");
+      expect(createdUserId).toBe("github:101");
+    } finally {
+      fetchStub.mockRestore();
+    }
   });
 });

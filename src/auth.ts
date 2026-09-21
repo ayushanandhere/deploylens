@@ -54,7 +54,7 @@ function githubConfig(env: Env) {
   if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) return null;
   return {
     as: {
-      issuer: "https://github.com",
+      issuer: "https://github.com/login/oauth",
       authorization_endpoint: "https://github.com/login/oauth/authorize",
       token_endpoint: "https://github.com/login/oauth/access_token"
     } satisfies oauth.AuthorizationServer,

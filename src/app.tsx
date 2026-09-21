@@ -91,17 +91,37 @@ function InvestigationWorkspace({
   const [selectedSource, setSelectedSource] = useState<LogSourceDetail | null>(null);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [accessEnded, setAccessEnded] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const exampleAttempted = useRef<string | null>(null);
+
+  const verifyAccess = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/investigations/${encodeURIComponent(investigationId)}`, {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (response.status === 401 || response.status === 404) {
+        setSelectedSource(null);
+        setAccessEnded(true);
+      }
+    } catch {
+      // A network interruption is not evidence that access was revoked.
+    }
+  }, [investigationId]);
 
   const agent = useAgent<DeployLensAgent, InvestigationState>({
     agent: "DeployLensAgent",
     name: investigationId,
+    shouldReconnectOnClose: (event) => event.code !== 4001,
     onOpen: useCallback(() => {
       setConnected(true);
       setLocalError(null);
     }, []),
-    onClose: useCallback(() => setConnected(false), []),
+    onClose: useCallback(() => {
+      setConnected(false);
+      void verifyAccess();
+    }, [verifyAccess]),
     onError: useCallback((_error: Event) => {
       setLocalError(getErrorMessage(new Error("WebSocket connection failed")));
     }, []),
@@ -128,6 +148,16 @@ function InvestigationWorkspace({
   useEffect(() => {
     if (error) setLocalError(getErrorMessage(error));
   }, [error]);
+
+  useEffect(() => {
+    const onFocus = () => { if (!document.hidden) void verifyAccess(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [verifyAccess]);
 
   useEffect(() => {
     if (!symptoms && investigation.symptoms) {
@@ -288,6 +318,13 @@ function InvestigationWorkspace({
       setExporting(false);
     }
   };
+
+  if (accessEnded) {
+    return <main className="empty-state" role="alert">
+      <h2>Investigation unavailable</h2>
+      <p>This investigation was deleted or your session ended. Its saved content is no longer available to this tab. Reload to view your remaining investigations.</p>
+    </main>;
+  }
 
   return (
     <main className="workspace workspace-grid">

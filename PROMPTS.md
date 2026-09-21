@@ -346,3 +346,20 @@ Finish with the verification results, any specific manual steps still needed, an
 ## 2026-09-21 — Continuation
 
 Continue.
+
+## 2026-09-21 — Local OAuth and pre-merge verification
+
+Continue DeployLens on the existing codex/private-investigations branch and PR #1.
+
+The attached screenshot shows my registered development GitHub OAuth app’s Client ID and Client Secret. I authorize you to use them to configure local development.
+
+1. Read the credentials from the screenshot and create or update /Users/ayushanand/Projects/deploylens/.dev.vars with GITHUB\_CLIENT\_ID, GITHUB\_CLIENT\_SECRET, and PUBLIC\_ORIGIN="[http://localhost:5173](http://localhost:5173)". Preserve any other configuration. Ensure Git ignores the file and restrict its permissions to the current user. Do not print credentials or include them in commits, documentation, or PROMPTS.md. Do not save the screenshot in the repository.
+2. Restart the development server on port 5173. The registered callback is [http://localhost:5173/auth/github/callback](http://localhost:5173/auth/github/callback). Open the app in Brave and guide me only when interactive GitHub authorization is needed.
+3. Complete real sign-in verification: private investigation creation, listing, reload restoration, source access, actual Markdown download, and logout. Verify compatibility with the OAuth app’s enabled access-token expiration.
+4. Complete the literal two-tab deletion test and investigate the previously reported SDK teardown errors. Fix application defects and document any remaining SDK/runtime issue accurately.
+5. If a second GitHub account is unavailable, retain real two-account OAuth isolation as unverified; use deterministic two-user authorization tests without claiming they replace the live test.
+6. Run relevant checks, update verification documentation, append this prompt without credentials to PROMPTS.md, and commit and push changes to the existing PR.
+
+Do not merge or deploy. Do not change billing or delete legacy production data. Finish with a concise readiness report and any remaining blockers.
+
+Proceed without asking me to manually create the configuration file.

@@ -244,6 +244,12 @@ export class DeployLensAgent extends AIChatAgent<Env, InvestigationState> {
 
   async purgeInvestigation(): Promise<void> {
     for (const connection of this.getConnections()) connection.close(4001, "Investigation deleted or expired");
+    // The control DO has already tombstoned this ID. Abort an active chat turn
+    // and let its SDK fiber settle before destroy() removes the fiber tables.
+    // Without this drain, a racing recovery/finalizer can write after deleteAll.
+    this.abortAllRequests(new Error("Investigation deleted or expired"));
+    const stable = await this.waitUntilStable({ timeout: 10_000, pendingInteraction: () => false });
+    if (!stable) console.warn("Chat turn did not settle before investigation teardown; SDK destroy will cancel remaining work.");
     await this.destroy();
   }
 

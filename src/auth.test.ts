@@ -1,0 +1,188 @@
+import { describe, expect, it, vi } from "vitest";
+import * as oauth from "oauth4webapi";
+import { digest, handleAppRequest } from "./auth";
+import type { Principal } from "./lib/access-policy";
+
+const id = "11111111-1111-4111-8111-111111111111";
+const origin = "https://deploylens.example";
+const aliceToken = "a".repeat(64);
+const bobToken = "b".repeat(64);
+const now = Date.now();
+
+async function fixture() {
+  const aliceHash = await digest(aliceToken);
+  const bobHash = await digest(bobToken);
+  const principals = new Map<string, Principal>([
+    [aliceHash, { kind: "private", sessionHash: aliceHash, userId: "github:101", expiresAt: now + 60_000 }],
+    [bobHash, { kind: "private", sessionHash: bobHash, userId: "github:202", expiresAt: now + 60_000 }]
+  ]);
+  let active = true;
+  const control = {
+    resolveSession: async (hash: string) => {
+      const principal = principals.get(hash);
+      return principal && principal.expiresAt > Date.now() ? principal : null;
+    },
+    authorize: async (hash: string, requestedId: string) => active && hash === aliceHash && requestedId === id ? principals.get(hash) : null,
+    listInvestigations: async (hash: string) => hash === aliceHash ? [{ id, createdAt: now }] : [],
+    beginDeletion: async (hash: string, requestedId: string) => {
+      if (hash !== aliceHash || requestedId !== id) throw new Error("Only the owner may delete.");
+      active = false;
+    }
+  };
+  const env = { DeployLensControl: { getByName: () => control } } as unknown as Env;
+  const request = (path: string, token?: string, init: RequestInit = {}) => new Request(`${origin}${path}`, {
+    ...init,
+    headers: {
+      ...(token ? { Cookie: `dl_session=${token}` } : {}),
+      ...init.headers
+    }
+  });
+  return { env, request, expireAlice: () => principals.set(aliceHash, { ...principals.get(aliceHash)!, expiresAt: 0 }) };
+}
+
+describe("HTTP and WebSocket route authorization", () => {
+  it("denies unauthenticated, second-account, and forged-owner requests on every Agent path", async () => {
+    const { env, request } = await fixture();
+    const paths = [
+      `/agents/deploy-lens-agent/${id}`,
+      `/agents/deploy-lens-agent/${id}/get-messages`,
+      `/agents/deploy-lens-agent/${id}/source/LOG-123`,
+      `/agents/deploy-lens-agent/${id}/export`
+    ];
+    for (const path of paths) {
+      expect((await handleAppRequest(request(path), env))?.status).toBe(401);
+      expect((await handleAppRequest(request(`${path}?ownerId=github:101`, bobToken), env))?.status).toBe(404);
+      expect(await handleAppRequest(request(path, aliceToken), env)).toBeNull();
+    }
+  });
+
+  it("checks WebSocket origin and ownership before SDK RPC/chat/state dispatch", async () => {
+    const { env, request } = await fixture();
+    const path = `/agents/deploy-lens-agent/${id}`;
+    const ws = { headers: { Origin: origin, Upgrade: "websocket" } };
+    expect((await handleAppRequest(request(path, bobToken, ws), env))?.status).toBe(404);
+    expect((await handleAppRequest(request(path, aliceToken, { headers: { Origin: "https://attacker.example", Upgrade: "websocket" } }), env))?.status).toBe(403);
+    expect(await handleAppRequest(request(path, aliceToken, ws), env)).toBeNull();
+  });
+
+  it("keeps listing and deletion owner-scoped and rejects cross-site mutation", async () => {
+    const { env, request } = await fixture();
+    const listing = await handleAppRequest(request("/api/investigations", bobToken), env);
+    expect(await listing?.json()).toEqual({ investigations: [] });
+    expect((await handleAppRequest(request(`/api/investigations/${id}`, bobToken, { method: "DELETE", headers: { Origin: origin } }), env))?.status).toBe(403);
+    expect((await handleAppRequest(request(`/api/investigations/${id}`, aliceToken, { method: "DELETE", headers: { Origin: "https://attacker.example" } }), env))?.status).toBe(403);
+    expect((await handleAppRequest(request(`/api/investigations/${id}`, aliceToken, { method: "DELETE", headers: { Origin: origin } }), env))?.status).toBe(200);
+    expect((await handleAppRequest(request(`/api/investigations/${id}`, aliceToken), env))?.status).toBe(404);
+    expect((await handleAppRequest(request(`/agents/deploy-lens-agent/${id}`, aliceToken, { headers: { Origin: origin, Upgrade: "websocket" } }), env))?.status).toBe(404);
+  });
+
+  it("rejects an expired session even with the old cookie and known URL", async () => {
+    const { env, request, expireAlice } = await fixture();
+    expireAlice();
+    expect((await handleAppRequest(request(`/agents/deploy-lens-agent/${id}`, aliceToken), env))?.status).toBe(401);
+    expect((await handleAppRequest(request(`/api/investigations/${id}`, aliceToken), env))?.status).toBe(401);
+  });
+
+  it("starts OAuth with a host-only state cookie and rejects missing or replayed state", async () => {
+    const states = new Map<string, string>();
+    const oauthControl = {
+      saveOAuthState: async (hash: string, verifier: string) => { states.set(hash, verifier); },
+      consumeOAuthState: async (hash: string) => { const value = states.get(hash) ?? null; states.delete(hash); return value; }
+    };
+    const env = {
+      PUBLIC_ORIGIN: origin,
+      GITHUB_CLIENT_ID: "test-client-id",
+      GITHUB_CLIENT_SECRET: "test-secret",
+      DeployLensControl: { getByName: () => oauthControl }
+    } as unknown as Env;
+    const started = await handleAppRequest(new Request(`${origin}/auth/github`), env);
+    expect(started?.status).toBe(302);
+    expect(started?.headers.get("Location")).toContain("https://github.com/login/oauth/authorize");
+    expect(started?.headers.get("Set-Cookie")).toMatch(/HttpOnly; SameSite=Lax; Max-Age=600; Secure/);
+    const stateCookie = started!.headers.get("Set-Cookie")!.split(";")[0]!;
+    const state = stateCookie.split("=")[1]!;
+    const callback = `${origin}/auth/github/callback?code=fake&state=${encodeURIComponent(state)}`;
+    expect((await handleAppRequest(new Request(callback), env))?.status).toBe(400);
+    states.delete(await digest(state));
+    expect((await handleAppRequest(new Request(callback, { headers: { Cookie: stateCookie } }), env))?.status).toBe(400);
+  });
+
+  it("accepts GitHub-style expiring access tokens at sign-in", async () => {
+    const result = await oauth.processAuthorizationCodeResponse(
+      { issuer: "https://github.com/login/oauth", authorization_endpoint: "https://github.com/login/oauth/authorize", token_endpoint: "https://github.com/login/oauth/access_token" },
+      { client_id: "test-client-id" },
+      new Response(JSON.stringify({
+        access_token: "synthetic-access-token",
+        token_type: "bearer",
+        expires_in: 28_800,
+        refresh_token: "synthetic-refresh-token",
+        refresh_token_expires_in: 15_897_600
+      }), { status: 200, headers: { "Content-Type": "application/json" } })
+    );
+    expect(result.expires_in).toBe(28_800);
+    expect(result.refresh_token).toBe("synthetic-refresh-token");
+  });
+
+  it("accepts GitHub's callback issuer and rejects a forged issuer", () => {
+    const server = {
+      issuer: "https://github.com/login/oauth",
+      authorization_endpoint: "https://github.com/login/oauth/authorize",
+      token_endpoint: "https://github.com/login/oauth/access_token"
+    };
+    const client = { client_id: "synthetic-client" };
+    const callback = new URL("http://localhost:5173/auth/github/callback?code=synthetic&state=synthetic&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth");
+    expect(oauth.validateAuthResponse(server, client, callback, "synthetic")).toBeInstanceOf(URLSearchParams);
+    callback.searchParams.set("iss", "https://attacker.example");
+    expect(() => oauth.validateAuthResponse(server, client, callback, "synthetic")).toThrow(/unexpected "iss"/);
+  });
+
+  it("completes the app callback with GitHub's issuer and an expiring token", async () => {
+    const states = new Map<string, string>();
+    let createdUserId: string | null = null;
+    const control = {
+      saveOAuthState: async (hash: string, verifier: string) => { states.set(hash, verifier); },
+      consumeOAuthState: async (hash: string) => { const value = states.get(hash) ?? null; states.delete(hash); return value; },
+      resolveSession: async () => null,
+      createSession: async (hash: string, kind: "private", userId: string) => {
+        expect(kind).toBe("private");
+        createdUserId = userId;
+        return { kind, sessionHash: hash, userId, expiresAt: Date.now() + 60_000 };
+      }
+    };
+    const env = {
+      PUBLIC_ORIGIN: origin,
+      GITHUB_CLIENT_ID: "synthetic-client",
+      GITHUB_CLIENT_SECRET: "synthetic-secret",
+      DeployLensControl: { getByName: () => control }
+    } as unknown as Env;
+    const started = await handleAppRequest(new Request(`${origin}/auth/github`), env);
+    const stateCookie = started!.headers.get("Set-Cookie")!.split(";")[0]!;
+    const state = stateCookie.split("=")[1]!;
+    const callback = new URL(`${origin}/auth/github/callback`);
+    callback.searchParams.set("code", "synthetic-code");
+    callback.searchParams.set("state", state);
+    callback.searchParams.set("iss", "https://github.com/login/oauth");
+    const fetchStub = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === "https://github.com/login/oauth/access_token") {
+        return Response.json({
+          access_token: "synthetic-access-token",
+          token_type: "bearer",
+          expires_in: 28_800,
+          refresh_token: "synthetic-refresh-token"
+        });
+      }
+      if (url === "https://api.github.com/user") return Response.json({ id: 101 });
+      throw new Error("Unexpected outbound request");
+    });
+    try {
+      const result = await handleAppRequest(new Request(callback, { headers: { Cookie: stateCookie } }), env);
+      expect(result?.status).toBe(302);
+      expect(result?.headers.get("Location")).toBe(`${origin}/`);
+      expect(result?.headers.get("Set-Cookie")).toContain("dl_session=");
+      expect(createdUserId).toBe("github:101");
+    } finally {
+      fetchStub.mockRestore();
+    }
+  });
+});

@@ -1,0 +1,6 @@
+# Optional local GitHub OAuth. Use a separate development OAuth app with
+# callback http://localhost:5173/auth/github/callback.
+# Copy this file to .dev.vars and fill values there; never commit .dev.vars.
+PUBLIC_ORIGIN="http://localhost:5173"
+GITHUB_CLIENT_ID="your-development-oauth-client-id"
+GITHUB_CLIENT_SECRET="your-development-oauth-client-secret"

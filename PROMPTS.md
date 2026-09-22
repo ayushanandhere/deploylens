@@ -246,3 +246,195 @@ Commit and push the final changes. Verify that GitHub Actions passes and that th
 Do not submit the job application.
 
 Finish with the public repository URL, deployed demo URL, final commit hash, CI result, production verification results, and any remaining blockers. Do not add optional features or pursue the bundle-size advisory unless it causes an observed usability problem.
+
+## 2026-09-21 — Private investigations, shared limits, and lifecycle
+
+Implement the next DeployLens milestone: private investigations, shared usage limits, and investigation deletion/expiry.
+
+Start by reading the repository instructions, README, PROMPTS.md, current implementation, and Git status. The last recorded release is 3b1ccd0acab760dff571a611c83ee93787a4439d, but inspect the actual current state and preserve subsequent work. Work on a new feature branch.
+
+First explain your proposed design briefly, then implement it. Check current official documentation and compatibility with the installed Cloudflare Agents SDK before choosing authentication and lifecycle APIs. Make routine implementation decisions yourself.
+
+1. Private investigations and authentication
+
+Add “Continue with GitHub” for users who want to create and revisit private investigations. Use a maintained authentication library compatible with Cloudflare Workers where practical; explain the choice and avoid unnecessary dependencies.
+
+Bind ownership to the authenticated user’s stable provider ID. Enforce authorization on the server for every investigation access path, including HTTP, WebSocket connection, RPC/tool-triggering operations, source retrieval, export, deletion, and any investigation listing.
+
+A UUID or client-provided owner field must never grant access. A second account must not be able to read or modify another user’s investigation even if it knows the URL. Account for expired sessions on already-open connections.
+
+Use secure session handling, OAuth state validation, appropriate cookie settings, logout, and protections against cross-site mutation requests. Never expose OAuth secrets or session credentials to the client, logs, or documentation.
+
+If OAuth application registration or a secret requires my action, complete all work that can be implemented and tested without it. Then give me the exact setup steps, callback URLs, and secret names. Do not ask me to paste secrets into chat.
+
+2. Preserve a useful public demo
+
+Keep the existing public landing URL and a clearly labeled “Try the demo” path so recruiters can explore without signing in.
+
+Use the bundled synthetic scenarios for anonymous demonstrations. Enforce the demo source restrictions on the server; do not allow arbitrary log uploads or source creation through an overlooked RPC/tool path.
+
+Keep each visitor’s demo state separate using a server-issued session. Private investigations must remain separate from anonymous demonstrations. Explain the demo’s data and retention limits clearly in the UI.
+
+Preserve streaming, source citations, evidence/check tracking, reload restoration, and Markdown export where applicable.
+
+3. Usage limits that survive new investigation IDs
+
+Keep the existing per-investigation limits and add:
+
+* Per-authenticated-user model usage limits.
+* Anonymous demo session limits and a shared demo allowance.
+* An application-wide daily model-request ceiling and a configurable switch to disable new inference requests.
+
+Use atomic server-side accounting so concurrent requests and new UUIDs cannot bypass the shared ceiling. Count actual model invocations, including tool-loop steps and retries, and avoid unsafe automatic refunds after ambiguous failures.
+
+Make limits configurable and document the defaults. Fail closed for new inference if the quota service is unavailable, while keeping authorized reads, exports, and deletion available.
+
+Return a clear limit message and reset time. Describe these as request limits, not guaranteed monetary spending caps. Do not change billing or enable paid services.
+
+4. Deletion, expiry, and existing data
+
+Add an owner-only delete action with confirmation. Remove the investigation’s conversation, log sources, structured state, and listing entry. Close active connections and ensure stale requests or a reused URL cannot silently recreate the deleted investigation.
+
+Add configurable expiry for anonymous demo sessions, initially 48 hours. Use an appropriate server-side scheduling mechanism and verify that cleanup cannot race with active writes or recreate expired data. Document what deletion covers, including any platform-log limitations.
+
+Existing investigations currently use bearer-like URLs. Do not assign ownership to whoever opens one first. Define and implement a safe transition for these legacy records without automatically deleting them or pretending their owners can be inferred. Explain the effect on old URLs before deployment.
+
+5. Verification
+
+Add focused tests for:
+
+* Two users attempting to access each other’s investigations.
+* Unauthenticated, expired-session, and forged-owner requests.
+* HTTP, WebSocket, RPC, source, and export authorization.
+* Concurrent quota consumption and attempts to bypass limits with new UUIDs.
+* Deletion and expiry with stale connections or in-flight writes.
+* Demo restrictions and separation from private investigations.
+
+Run the existing checks and relevant browser flows. Use deterministic substitutes for routine CI; run small live authentication and Workers AI checks only when configured. Clearly distinguish verified behavior from configuration-dependent checks.
+
+6. Documentation and delivery
+
+Append this prompt verbatim to PROMPTS.md, excluding any future secret values. Update README and environment examples with setup instructions, architecture decisions, limits, legacy-data handling, and verified results.
+
+Keep this milestone focused. Preserve the existing model and diagnostic functionality unless a demonstrated compatibility problem requires a change.
+
+Review the diff and tracked files for secrets and unintended artifacts. Commit and push the feature branch to the existing repository and open a draft pull request. Do not merge or deploy this milestone yet.
+
+Finish with a concise report covering implemented behavior, test results, configuration I must complete, migration implications, remaining limitations, and the draft PR URL.
+
+## 2026-09-21 — Pre-merge private-investigation verification
+
+Continue the private-investigation milestone on codex/private-investigations and draft PR #1.
+
+I have registered the development GitHub OAuth app and configured its credentials in the local ignored .dev.vars file. Verify that the required variables exist without printing their values. Preserve other local configuration.
+
+Complete the remaining pre-merge verification:
+
+1. Test real GitHub sign-in, private investigation creation, reload restoration, listing, source access, export, and logout. Confirm the callback URL matches the actual local server. Check compatibility with the OAuth app’s token-expiration settings.
+2. Verify ownership isolation using two real GitHub accounts in separate browser profiles if available. Let me perform interactive sign-in. If a second account is unavailable, run the deterministic two-user authorization tests and explicitly retain real two-account OAuth as unverified. Do not treat two sessions of the same account as two different users.
+3. Test deletion while another tab has the investigation open and while an update or model response is in flight. Confirm stale sockets, requests, exports, and reopened URLs cannot expose or recreate deleted data.
+4. Test anonymous expiry using a local-only shortened retention setting or controlled clock. Verify server-side cleanup and denial of stale access, then restore the normal 48-hour configuration. Do not alter production retention or existing deployed data.
+5. Verify Markdown export in a regular browser such as Brave or Chrome. Confirm an actual file downloads and inspect its contents; a success notice alone is insufficient.
+6. Fix issues found, run the affected regression tests and npm run check, and update README with precise results and remaining limitations. Keep production socket behavior explicitly pending until tested in a deployed environment.
+
+Append this prompt verbatim to PROMPTS.md. Review the diff for credentials and unintended files, commit the fixes, and push to the existing branch and draft PR.
+
+Do not merge, deploy, change billing, or delete legacy production investigations.
+
+Finish with the verification results, any specific manual steps still needed, and a concrete proposed deployment and rollback plan. Identify any Durable Object migrations or data changes that a code rollback would not reverse.
+
+## 2026-09-21 — Continuation
+
+Continue.
+
+## 2026-09-21 — Local OAuth and pre-merge verification
+
+Continue DeployLens on the existing codex/private-investigations branch and PR #1.
+
+The attached screenshot shows my registered development GitHub OAuth app’s Client ID and Client Secret. I authorize you to use them to configure local development.
+
+1. Read the credentials from the screenshot and create or update /Users/ayushanand/Projects/deploylens/.dev.vars with GITHUB\_CLIENT\_ID, GITHUB\_CLIENT\_SECRET, and PUBLIC\_ORIGIN="[http://localhost:5173](http://localhost:5173)". Preserve any other configuration. Ensure Git ignores the file and restrict its permissions to the current user. Do not print credentials or include them in commits, documentation, or PROMPTS.md. Do not save the screenshot in the repository.
+2. Restart the development server on port 5173. The registered callback is [http://localhost:5173/auth/github/callback](http://localhost:5173/auth/github/callback). Open the app in Brave and guide me only when interactive GitHub authorization is needed.
+3. Complete real sign-in verification: private investigation creation, listing, reload restoration, source access, actual Markdown download, and logout. Verify compatibility with the OAuth app’s enabled access-token expiration.
+4. Complete the literal two-tab deletion test and investigate the previously reported SDK teardown errors. Fix application defects and document any remaining SDK/runtime issue accurately.
+5. If a second GitHub account is unavailable, retain real two-account OAuth isolation as unverified; use deterministic two-user authorization tests without claiming they replace the live test.
+6. Run relevant checks, update verification documentation, append this prompt without credentials to PROMPTS.md, and commit and push changes to the existing PR.
+
+Do not merge or deploy. Do not change billing or delete legacy production data. Finish with a concise readiness report and any remaining blockers.
+
+Proceed without asking me to manually create the configuration file.
+
+## 2026-09-21 — Release-readiness review
+
+Continue DeployLens on the existing branch and draft PR #1. The last reported commit is 5392065b938dfbddea6f4984ff9c49bfe4ee690e; inspect the actual current state first.
+
+Complete a focused release-readiness review without adding features.
+
+1. Review authorization across HTTP, WebSocket, RPC, source retrieval, export, listing, and deletion. Confirm deterministic tests use distinct provider user IDs and cover attempts by one user to access another user’s investigation. Keep real two-account OAuth isolation explicitly unverified unless a second account becomes available.
+2. Investigate the keep-alive alarm error when deletion interrupts a model response. Determine whether it can cause continued inference, unhandled failures, storage recreation, or repeated alarms. Fix application defects. If it is an SDK/runtime issue, document the reproduction, observed impact, and evidence supporting whether it blocks release. Do not merely suppress the error.
+3. Review the distinction between GitHub access-token expiry and application-session expiry. Use a controlled clock or local-only shortened lifetime to verify the applicable behavior, including an already-open WebSocket. Do not claim that an actual eight-hour expiry was tested.
+4. Prepare exact production OAuth registration fields, callback URL, required configuration and secret names, deployment commands, and a short production smoke-test checklist. Never include secret values. Confirm whether migration v2 and its Control/Quota classes still require a forward-fix strategy.
+5. Document how deployment changes old bearer-like investigation URLs and preserves legacy data. Provide a concrete recovery plan that retains required Durable Object classes and bindings.
+
+Run checks needed for any changes, update README and PROMPTS.md, review the diff for secrets, and commit and push to the existing PR.
+
+Do not merge, deploy, change billing, or delete legacy production data. Avoid repeating already-completed browser checks unless a change affects them.
+
+Finish with a clear release-readiness verdict, any concrete blockers, and the exact production setup steps I must complete.
+
+## 2026-09-21 — Controlled production deployment
+
+Proceed with a controlled production deployment of the private-investigation milestone from PR #1.
+
+I authorize this deployment and accept that existing bearer-like investigation URLs will become inaccessible while their data is retained without assigning ownership. Do not delete legacy data. Do not change billing.
+
+1. Inspect the current branch, PR, CI, and deployment state. Use the reviewed milestone at commit 89856828a3a80432f317780fdb60155937cf4d95 or its verified successor. Preserve unrelated work.
+2. Configure the separate production OAuth credentials I provide in a user-owned 0600 file outside the repository. Never print or commit them. Confirm the production origin and callback configuration. Do not overwrite development credentials.
+3. Run the required release checks and deploy with the production secrets file using the supported Wrangler workflow. Preserve all Durable Object classes, bindings, and migration tags required by migration v2. Record the deployed commit and version.
+4. Perform focused production smoke tests:
+
+- Anonymous synthetic demo, streaming, citations, and runbook matching.
+- Real GitHub sign-in, private creation/listing, reload restoration, source retrieval, Markdown download, and logout.
+- Two-tab deletion during an active model response.
+- Denial of stale socket operations, source/export requests, and reopened deleted URLs.
+- Worker-log review for teardown errors, repeated alarms, or evidence of storage recreation.
+
+Use only disposable synthetic test investigations. Let me complete interactive sign-in when needed. If a second real GitHub account is unavailable, retain that limitation explicitly; do not repeat synthetic tests and call them live two-account verification.
+
+5. If a production gate fails, stop release finalization, report the impact, and apply a focused forward-fix retaining the required classes and migrations. Do not attempt an unsupported rollback to the pre-v2 release.
+6. Update documentation and PROMPTS.md without credentials. Commit and push any fixes or verification records to PR #1. Keep the PR unmerged pending the production results.
+
+Finish with the deployment URL/version, deployed commit, production test results, remaining limitations, and whether PR #1 is ready to merge. Do not add new features.
+
+## 2026-09-21 — Production OAuth authorization and deployment continuation
+
+Yes—I authorize submitting the prepared “DeployLens Production” GitHub OAuth app registration under my personal account and generating its client secret.
+Store the production credentials in a user-owned 0600 file outside the repository without displaying or committing them. Then continue the already-authorized controlled deployment and production smoke tests from the previous prompt.
+I accept that legacy bearer-like URLs will become inaccessible while their data is retained. Preserve the required Durable Object classes, bindings, and migrations. Do not change billing or delete legacy data.
+Keep PR #1 unmerged until you report the production results. Proceed without requesting the same authorization again; pause only for an actual blocker or interactive sign-in that requires me.
+
+## 2026-09-21 — Production smoke-test deletion authorization
+
+Yes—I authorize permanently deleting the disposable synthetic test investigation identified as 2092a31e. Complete its in-app confirmation after verifying the target matches. This authorization does not cover legacy data or unrelated investigations.
+Finish the production smoke tests: two-tab deletion during an active model response, stale socket/source/export denial, denial when reopening the deleted URL, Worker-log review for teardown errors or storage recreation, and logout.
+If the current investigation no longer has an active model response, you may create and delete additional disposable synthetic test investigations solely to complete these checks.
+Fix concrete defects if found within the previously authorized deployment scope. Update the verification record and PROMPTS.md, push changes, and confirm CI. Keep real two-account OAuth isolation explicitly unverified unless a second account is available.
+Do not merge PR #1 yet. Report the final production results and whether any concrete release blockers remain. Do not request deletion authorization again for these disposable test investigations.
+
+## 2026-09-22 — Finalize private-investigation milestone
+
+Finalize the private-investigation milestone. I authorize marking PR #1 ready and merging it after confirming the current PR head has passing required checks and no unresolved blocking review comments. Do not bypass branch protections.
+
+Confirm that the difference between deployed commit 7c666536c9256d7718f7126f63a5727288fe1502 and the final PR head is documentation/prompt history only. If runtime changes exist, identify and verify them before proceeding.
+
+Preserve the documented limitations:
+
+- Live isolation between two distinct GitHub accounts remains unverified.
+- Cleanup was supported by access checks and an approximately three-minute Worker-log observation, not a direct storage audit.
+- An already-started provider call may finish despite deletion.
+
+Merge using the repository’s supported merge method, then update the local main branch without discarding local work. Confirm post-merge CI and record how the deployed version maps to the merged source. Do not redeploy solely for documentation changes.
+
+Do not add features, repeat completed smoke tests unnecessarily, change billing, or delete legacy investigations.
+
+Finish with the merged PR URL, main commit, CI result, current deployment version, and a concise factual summary of the completed milestone suitable for updating my career profile.

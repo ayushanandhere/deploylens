@@ -22,11 +22,25 @@ import {
   MAX_LOG_CHARACTERS,
   MAX_LOG_LINES
 } from "./lib/log-analysis";
-import {
-  getOrCreateInvestigationId,
-  startNewInvestigation
-} from "./lib/investigation";
 import type { DeployLensAgent } from "./server";
+
+type SessionView = { kind: "demo" | "private"; expiresAt: number; githubConfigured: boolean };
+type ListedInvestigation = { id: string; createdAt: number };
+
+async function api<T>(path: string, method = "GET"): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    headers: method === "GET" ? undefined : { "Content-Type": "application/json" }
+  });
+  const data: unknown = await response.json();
+  if (!response.ok) {
+    const error = data && typeof data === "object" && "error" in data && typeof data.error === "string"
+      ? data.error : `Request failed (${response.status}).`;
+    throw new Error(error);
+  }
+  return data as T;
+}
 
 type LogSourceDetail = Awaited<ReturnType<DeployLensAgent["getLogSource"]>>;
 
@@ -45,18 +59,23 @@ function downloadMarkdown(markdown: string, investigationId: string) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `deploylens-${investigationId.slice(0, 8)}.md`;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  // Give the browser's download manager time to consume the object URL.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function InvestigationWorkspace({
   investigationId,
   pendingExampleId,
-  onExampleLoaded
+  onExampleLoaded,
+  demo
 }: {
   investigationId: string;
   pendingExampleId: string | null;
   onExampleLoaded: () => void;
+  demo: boolean;
 }) {
   const [input, setInput] = useState("");
   const [connected, setConnected] = useState(false);
@@ -72,17 +91,37 @@ function InvestigationWorkspace({
   const [selectedSource, setSelectedSource] = useState<LogSourceDetail | null>(null);
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [accessEnded, setAccessEnded] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const exampleAttempted = useRef<string | null>(null);
+
+  const verifyAccess = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/investigations/${encodeURIComponent(investigationId)}`, {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      if (response.status === 401 || response.status === 404) {
+        setSelectedSource(null);
+        setAccessEnded(true);
+      }
+    } catch {
+      // A network interruption is not evidence that access was revoked.
+    }
+  }, [investigationId]);
 
   const agent = useAgent<DeployLensAgent, InvestigationState>({
     agent: "DeployLensAgent",
     name: investigationId,
+    shouldReconnectOnClose: (event) => event.code !== 4001,
     onOpen: useCallback(() => {
       setConnected(true);
       setLocalError(null);
     }, []),
-    onClose: useCallback(() => setConnected(false), []),
+    onClose: useCallback(() => {
+      setConnected(false);
+      void verifyAccess();
+    }, [verifyAccess]),
     onError: useCallback((_error: Event) => {
       setLocalError(getErrorMessage(new Error("WebSocket connection failed")));
     }, []),
@@ -109,6 +148,16 @@ function InvestigationWorkspace({
   useEffect(() => {
     if (error) setLocalError(getErrorMessage(error));
   }, [error]);
+
+  useEffect(() => {
+    const onFocus = () => { if (!document.hidden) void verifyAccess(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [verifyAccess]);
 
   useEffect(() => {
     if (!symptoms && investigation.symptoms) {
@@ -270,6 +319,13 @@ function InvestigationWorkspace({
     }
   };
 
+  if (accessEnded) {
+    return <main className="empty-state" role="alert">
+      <h2>Investigation unavailable</h2>
+      <p>This investigation was deleted or your session ended. Its saved content is no longer available to this tab. Reload to view your remaining investigations.</p>
+    </main>;
+  }
+
   return (
     <main className="workspace workspace-grid">
       <section className="chat-column">
@@ -280,8 +336,7 @@ function InvestigationWorkspace({
               <p className="eyebrow">Investigation ready</p>
               <h2>Follow the evidence.</h2>
               <p>
-                Describe the symptom, attach a redacted log source, then ask
-                DeployLens to analyze its stable source ID.
+                {demo ? "Choose a labeled synthetic example above, then ask DeployLens to analyze its stable source ID." : "Describe the symptom, attach a redacted log source, then ask DeployLens to analyze its stable source ID."}
               </p>
               <div className="guardrail">
                 <span aria-hidden="true">i</span>
@@ -365,7 +420,7 @@ function InvestigationWorkspace({
           </span>
         </div>
 
-        <details className="panel-card attach-card" open={investigation.sources.length === 0}>
+        {!demo && <details className="panel-card attach-card" open={investigation.sources.length === 0}>
           <summary>Attach pasted logs</summary>
           <form onSubmit={attachLog} className="stack-form">
             <label>
@@ -387,7 +442,8 @@ function InvestigationWorkspace({
               </button>
             </div>
           </form>
-        </details>
+        </details>}
+        {demo && <section className="panel-card"><h3>Demo sources</h3><p>Use a labeled synthetic example above. Pasted logs are disabled for anonymous sessions on the server.</p></section>}
 
         <section className="panel-card">
           <h3>Reported symptoms</h3>
@@ -522,23 +578,81 @@ function InvestigationWorkspace({
 }
 
 export default function App() {
-  const [investigationId, setInvestigationId] = useState(() => {
-    const requestedId = new URLSearchParams(window.location.search).get("investigation");
-    const id = getOrCreateInvestigationId(window.localStorage, undefined, requestedId);
-    const url = new URL(window.location.href);
-    url.searchParams.set("investigation", id);
-    window.history.replaceState(null, "", url);
-    return id;
-  });
+  const [session, setSession] = useState<SessionView | null>(null);
+  const [investigations, setInvestigations] = useState<ListedInvestigation[]>([]);
+  const [investigationId, setInvestigationId] = useState<string | null>(null);
   const [pendingExampleId, setPendingExampleId] = useState<string | null>(null);
+  const [appError, setAppError] = useState<string | null>(null);
+  const [booting, setBooting] = useState(true);
 
-  const beginNewInvestigation = (exampleId: string | null = null) => {
-    const id = startNewInvestigation(window.localStorage);
+  const selectInvestigation = useCallback((id: string, replace = false) => {
     const url = new URL(window.location.href);
     url.searchParams.set("investigation", id);
-    window.history.pushState(null, "", url);
-    setPendingExampleId(exampleId);
+    window.history[replace ? "replaceState" : "pushState"](null, "", url);
     setInvestigationId(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const boot = async () => {
+      try {
+        const current = await api<SessionView>("/api/session");
+        const listed = await api<{ investigations: ListedInvestigation[] }>("/api/investigations");
+        if (cancelled) return;
+        setSession(current);
+        setInvestigations(listed.investigations);
+        const requestedId = new URLSearchParams(window.location.search).get("investigation");
+        let requested = listed.investigations.find((item) => item.id === requestedId)?.id;
+        if (requestedId && !requested) {
+          try {
+            await api(`/api/investigations/${encodeURIComponent(requestedId)}`);
+            requested = requestedId;
+            setInvestigations((current) => [{ id: requestedId, createdAt: 0 }, ...current]);
+          } catch {
+            setAppError("That investigation is unavailable to this session. Legacy public URLs are not automatically claimed or migrated.");
+          }
+        }
+        const existing = requested ?? listed.investigations[0]?.id;
+        if (existing) selectInvestigation(existing, true);
+        else {
+          const created = await api<{ id: string }>("/api/investigations", "POST");
+          if (cancelled) return;
+          setInvestigations([{ id: created.id, createdAt: Date.now() }]);
+          selectInvestigation(created.id, true);
+        }
+      } catch (error) {
+        if (!cancelled) setAppError(getErrorMessage(error));
+      } finally { if (!cancelled) setBooting(false); }
+    };
+    void boot();
+    return () => { cancelled = true; };
+  }, [selectInvestigation]);
+
+  const beginNewInvestigation = async (exampleId: string | null = null) => {
+    setAppError(null);
+    try {
+      const created = await api<{ id: string }>("/api/investigations", "POST");
+      setInvestigations((current) => [{ id: created.id, createdAt: Date.now() }, ...current]);
+      setPendingExampleId(exampleId);
+      selectInvestigation(created.id);
+    } catch (error) { setAppError(getErrorMessage(error)); }
+  };
+
+  const deleteInvestigation = async () => {
+    if (!investigationId || session?.kind !== "private") return;
+    if (!window.confirm("Permanently delete this investigation, including its messages, logs, and saved evidence?")) return;
+    try {
+      await api(`/api/investigations/${investigationId}`, "DELETE");
+      const remaining = investigations.filter((item) => item.id !== investigationId);
+      setInvestigations(remaining);
+      if (remaining[0]) selectInvestigation(remaining[0].id, true);
+      else { setInvestigationId(null); await beginNewInvestigation(); }
+    } catch (error) { setAppError(getErrorMessage(error)); }
+  };
+
+  const logout = async () => {
+    try { await api("/api/logout", "POST"); window.location.assign("/"); }
+    catch (error) { setAppError(getErrorMessage(error)); }
   };
 
   return (
@@ -556,21 +670,25 @@ export default function App() {
           ))}
         </div>
         <div className="topbar-actions">
-          <div className="connection-state" title={investigationId}>Investigation {investigationId.slice(0, 8)}</div>
-          <button className="new-button" onClick={() => beginNewInvestigation()}><span aria-hidden="true">＋</span> New investigation</button>
+          {session?.kind === "demo" ? (session.githubConfigured ? <a className="new-button" href="/auth/github">Continue with GitHub</a> : <button className="new-button" disabled title="GitHub OAuth is not configured">GitHub sign-in pending setup</button>) : <button className="text-button" onClick={logout}>Log out</button>}
+          {investigations.length > 1 && <select aria-label="Open investigation" value={investigationId ?? ""} onChange={(event) => selectInvestigation(event.target.value)}>{investigations.map((item) => <option value={item.id} key={item.id}>{item.id.slice(0, 8)}</option>)}</select>}
+          {investigationId && <div className="connection-state" title={investigationId}>Investigation {investigationId.slice(0, 8)}</div>}
+          <button className="new-button" onClick={() => void beginNewInvestigation()} disabled={!session}><span aria-hidden="true">＋</span> New investigation</button>
+          {session?.kind === "private" && <button className="text-button" onClick={() => void deleteInvestigation()} disabled={!investigationId}>Delete</button>}
         </div>
       </header>
       <div className="demo-boundary" role="note">
-        <strong>Public demo:</strong> anyone with an investigation URL can access
-        its contents. Use only synthetic or redacted logs; never submit secrets or
-        sensitive production data.
+        {session?.kind === "private" ? <><strong>Private investigation:</strong> access is tied to your GitHub account. Keep logs redacted; platform logs may retain metadata after deletion.</> : <><strong>Try the demo:</strong> no sign-in required. Only bundled synthetic logs are accepted. This browser session expires {session ? new Date(session.expiresAt).toLocaleString() : "after 48 hours"}; do not submit sensitive information.</>}
       </div>
-      <InvestigationWorkspace
+      {appError && <div className="error-banner" role="alert">{appError}</div>}
+      {booting && <main className="empty-state">Opening your investigation…</main>}
+      {!booting && investigationId && session && <InvestigationWorkspace
         key={investigationId}
         investigationId={investigationId}
         pendingExampleId={pendingExampleId}
         onExampleLoaded={() => setPendingExampleId(null)}
-      />
+        demo={session.kind === "demo"}
+      />}
     </div>
   );
 }

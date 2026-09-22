@@ -8,16 +8,38 @@
     "binding": "AI",
     "remote": true
   },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://deploylens.ayushanandhere.workers.dev",
+    "INFERENCE_ENABLED": "true",
+    "PRIVATE_MODEL_DAILY": "80",
+    "DEMO_SESSION_MODEL_DAILY": "12",
+    "DEMO_SHARED_MODEL_DAILY": "240",
+    "GLOBAL_MODEL_DAILY": "500",
+    "DEMO_TTL_HOURS": "48",
+    "PRIVATE_SESSION_DAYS": "14",
+    "DEMO_SESSIONS_DAILY": "1000",
+    "DEMO_INVESTIGATIONS_DAILY": "8",
+    "DEMO_SHARED_INVESTIGATIONS_DAILY": "500",
+    "PRIVATE_INVESTIGATIONS_DAILY": "30"
+  },
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/agents/*"]
+    "run_worker_first": ["/agents/*", "/api/*", "/auth/*"]
   },
   "durable_objects": {
     "bindings": [
       {
         "name": "DeployLensAgent",
         "class_name": "DeployLensAgent"
+      },
+      {
+        "name": "DeployLensControl",
+        "class_name": "DeployLensControl"
+      },
+      {
+        "name": "DeployLensQuota",
+        "class_name": "DeployLensQuota"
       }
     ]
   },
@@ -25,6 +47,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["DeployLensAgent"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["DeployLensControl", "DeployLensQuota"]
     }
   ]
 }

@@ -1,6 +1,6 @@
 # DeployLens
 
-**Live demo:** [deploylens.ayushanandhere.workers.dev](https://deploylens.ayushanandhere.workers.dev). The private-investigation milestone is deployed from commit `7c666536c9256d7718f7126f63a5727288fe1502` as Worker version `a6d251f7-f95d-491c-831a-aec9f903c9c5` on 2026-09-21. Draft PR #1 remains unmerged.
+**Live demo:** [deploylens.ayushanandhere.workers.dev](https://deploylens.ayushanandhere.workers.dev). The private-investigation milestone is deployed from runtime commit `7c666536c9256d7718f7126f63a5727288fe1502` as Worker version `a6d251f7-f95d-491c-831a-aec9f903c9c5` on 2026-09-21. Later source changes through this milestone update only documentation and prompt history; no redeployment is needed for them.
 
 DeployLens helps developers investigate failed deployments without treating an AI guess as proof. It extracts line-referenced findings from logs, checks three curated runbooks, keeps hypotheses visibly unconfirmed, records human checks, and exports a Markdown handoff.
 

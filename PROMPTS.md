@@ -420,3 +420,21 @@ Finish the production smoke tests: two-tab deletion during an active model respo
 If the current investigation no longer has an active model response, you may create and delete additional disposable synthetic test investigations solely to complete these checks.
 Fix concrete defects if found within the previously authorized deployment scope. Update the verification record and PROMPTS.md, push changes, and confirm CI. Keep real two-account OAuth isolation explicitly unverified unless a second account is available.
 Do not merge PR #1 yet. Report the final production results and whether any concrete release blockers remain. Do not request deletion authorization again for these disposable test investigations.
+
+## 2026-09-22 — Finalize private-investigation milestone
+
+Finalize the private-investigation milestone. I authorize marking PR #1 ready and merging it after confirming the current PR head has passing required checks and no unresolved blocking review comments. Do not bypass branch protections.
+
+Confirm that the difference between deployed commit 7c666536c9256d7718f7126f63a5727288fe1502 and the final PR head is documentation/prompt history only. If runtime changes exist, identify and verify them before proceeding.
+
+Preserve the documented limitations:
+
+- Live isolation between two distinct GitHub accounts remains unverified.
+- Cleanup was supported by access checks and an approximately three-minute Worker-log observation, not a direct storage audit.
+- An already-started provider call may finish despite deletion.
+
+Merge using the repository’s supported merge method, then update the local main branch without discarding local work. Confirm post-merge CI and record how the deployed version maps to the merged source. Do not redeploy solely for documentation changes.
+
+Do not add features, repeat completed smoke tests unnecessarily, change billing, or delete legacy investigations.
+
+Finish with the merged PR URL, main commit, CI result, current deployment version, and a concise factual summary of the completed milestone suitable for updating my career profile.
